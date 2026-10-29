@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 
@@ -23,7 +24,7 @@ const errors = []
 let hostBrowser, guestBrowser
 try {
   const launch = () => chromium.launch({
-    executablePath: '/usr/bin/chromium',
+    executablePath: process.env.CHROME_PATH || (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined),
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
   })
   hostBrowser = await launch()

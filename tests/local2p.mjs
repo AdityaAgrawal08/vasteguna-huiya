@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 
@@ -17,7 +18,7 @@ const errors = []
 let browser
 try {
   browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || '/usr/bin/chromium',
+    executablePath: process.env.CHROME_PATH || (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined),
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
   })
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
