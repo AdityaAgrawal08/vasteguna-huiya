@@ -14,6 +14,8 @@ import { createCow } from './game/cow.js'
 import { Input, isTouchDevice } from './input.js'
 import { UI } from './ui.js'
 import { portrait } from './portraits.js'
+import { NetClient } from './net.js'
+import { createRemoteMatch, applySnapshot } from './game/remote.js'
 
 const app = {
   state: 'loading',
@@ -42,6 +44,13 @@ const app = {
   select: { p1: 'modi', p2: 'rahul', stage: 'sansad', difficulty: 'normal', picking: 'p1' },
   online: { active: false, guest: false, room: null, status: '', canFight: false },
   local2p: false,
+  net: null,
+  netMode: false,
+  netSide: 0,
+  netRoom: null,
+  netSnap: null,
+  netSnaps: [],
+  netStarted: false,
   superOverlayTime: 0,
   musicOn: true,
   muted: false,
@@ -90,8 +99,18 @@ function boot() {
 
   app.ui.onTile = (id) => pickTile(id)
   app.ui.onPlate = (which) => { app.select.picking = which === 'p1' ? 'p1' : 'p2'; app.ui.renderSelect(selectState()) }
-  app.ui.onStage = (stage) => { app.select.stage = stage; app.arena.setStage(stage); app.ui.renderSelect(selectState()) }
-  app.ui.onDiff = (diff) => { app.select.difficulty = diff; app.ui.renderSelect(selectState()) }
+  app.ui.onStage = (stage) => {
+    if (app.online.active && app.net && !app.local2p && app.netSide !== 0) return
+    app.select.stage = stage
+    if (app.online.active && app.net && !app.local2p) app.net.stage(stage)
+    app.arena.setStage(stage)
+    app.ui.renderSelect(selectState())
+  }
+  app.ui.onDiff = (diff) => {
+    if (app.online.active && !app.local2p) return
+    app.select.difficulty = diff
+    app.ui.renderSelect(selectState())
+  }
 
   bindGlobal()
   bindScreens()
@@ -220,12 +239,24 @@ function goTitle() {
 }
 
 function selectState() {
+  let p1 = app.select.p1
+  let p2 = app.select.p2
+  let stage = app.select.stage
+  if (app.online.active && app.netRoom) {
+    p1 = app.netRoom.hostChar || p1
+    p2 = app.netRoom.guestChar || p2
+    stage = app.netRoom.stage || stage
+  }
+  const bothPicked = !!(app.netRoom?.hostChar && app.netRoom?.guestChar)
+  const canFight = app.local2p ? true : app.online.active && app.net ? bothPicked : true
   return {
-    ...app.select,
+    ...app.select, p1, p2, stage,
     online: app.online.active,
     guest: app.online.guest,
-    onlineStatus: app.online.status,
-    canFight: app.online.canFight,
+    onlineStatus: app.netRoom
+      ? `ROOM ${app.netRoom.code} · ${app.online.guest ? 'GUEST' : 'HOST'}${bothPicked ? ' · READY' : ' · PICK YOUR NETA'}`
+      : app.online.status,
+    canFight,
     taken: app.online.taken,
   }
 }
@@ -236,6 +267,16 @@ function pickTile(id) {
   if (id === 'random') {
     const pool = ROSTER.filter((r) => r !== other)
     chosen = pool[Math.floor(Math.random() * pool.length)]
+  }
+  if (app.online.active && app.net && !app.local2p) {
+    if (app.netSide === 0) app.select.p1 = chosen
+    else app.select.p2 = chosen
+    app.select.picking = app.netSide === 0 ? 'p1' : 'p2'
+    app.net.pick(chosen, app.select.stage)
+    app.ui.renderSelect(selectState())
+    app.audio.play('select')
+    refreshPreview()
+    return
   }
   if (app.select.picking === 'p1') {
     app.select.p1 = chosen
@@ -250,20 +291,26 @@ function pickTile(id) {
 }
 
 function movePick(which, dir) {
+  if (app.online.active && app.net && !app.local2p) {
+    if ((app.netSide === 0) !== (which === 'p1')) return
+  }
   const key = which === 'p1' ? 'p1' : 'p2'
   let i = ROSTER.indexOf(app.select[key])
   i = (i + dir + ROSTER.length) % ROSTER.length
   app.select[key] = ROSTER[i]
   app.select.picking = which
+  if (app.online.active && app.net && !app.local2p) app.net.pick(app.select[key], app.select.stage)
   app.ui.renderSelect(selectState())
   app.audio.play('move')
   refreshPreview()
 }
 
 function cycleStage() {
+  if (app.online.active && app.net && !app.local2p && app.netSide !== 0) return
   const keys = Object.keys(STAGES)
   const i = keys.indexOf(app.select.stage)
   app.select.stage = keys[(i + 1) % keys.length]
+  if (app.online.active && app.net && !app.local2p) app.net.stage(app.select.stage)
   app.arena.setStage(app.select.stage)
   app.ui.renderSelect(selectState())
   app.audio.play('move')
@@ -278,6 +325,15 @@ function setDiff(d) {
 /* ------------------------------------------------------------------ fight */
 
 function startFight() {
+  if (app.online.active && !app.local2p && app.net) {
+    if (!selectState().canFight) return
+    app.net.ready()
+    const btn = document.getElementById('fight-btn')
+    btn.textContent = 'WAITING…'
+    btn.classList.add('waiting')
+    app.ui.renderSelect(selectState())
+    return
+  }
   if (app.online.active && !app.online.canFight) return
   app.audio.unlock()
   app.audio.play('fight')
@@ -323,6 +379,54 @@ function startFight() {
   app.ui.updateHud(app.match)
 }
 
+function startNetFight(msg) {
+  cleanupFight()
+  disposePreview()
+  app.netMode = true
+  app.netStarted = true
+  app.netSnaps = []
+  app.select.p1 = msg.p1
+  app.select.p2 = msg.p2
+  app.select.stage = msg.stage
+  app.match = createRemoteMatch(msg)
+  app.rigs = [createFighterRig(msg.p1), createFighterRig(msg.p2)]
+  for (const r of app.rigs) app.scene.add(r.root)
+  app.rigs[0].root.position.set(app.match.fighters[0].x, 0, 0)
+  app.rigs[1].root.position.set(app.match.fighters[1].x, 0, 0)
+  app.rigs[0].setFacing(1)
+  app.rigs[1].setFacing(-1)
+
+  app.arena.setStage(msg.stage)
+  app.ui.setHudChars(msg.p1, msg.p2)
+  app.ui.setAnchors([msg.p1, msg.p2])
+  app.ui.hud.classList.remove('hidden')
+  app.ui.show(null)
+  app.ui.setVignette(false)
+  app.ui.timerEl.textContent = '60'
+  app.ui.tickerTrack.innerHTML = ''
+  app.ui.tickerItems = []
+  app.ui.tickerOffset = 0
+  for (let i = 0; i < 3; i++) app.ui.pushTicker(COMMENTARY.filler[i])
+  app.ui.pushTicker('BREAKING: Friend-room match connected.', true)
+
+  const btn = document.getElementById('fight-btn')
+  if (btn) { btn.textContent = 'FIGHT!'; btn.classList.remove('waiting') }
+  const rb = document.getElementById('rematch-btn')
+  if (rb) rb.textContent = 'REMATCH'
+  document.body.classList.add('in-battle')
+  app.input.enabled = true
+  app.state = 'fight'
+  app.shake = 0
+  app.superSeq = null
+  app.cow = null
+  app.cowActive = false
+  app.cowUsed = true
+  app.resultTimer = 0
+  app.pendingResult = null
+  app.audio.startMusic(msg.stage)
+  app.ui.updateHud(app.match)
+}
+
 function cleanupFight() {
   app.input.enabled = false
   for (const r of app.rigs) {
@@ -332,6 +436,8 @@ function cleanupFight() {
   if (app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
   if (app.cow) { app.cow.dispose(); app.cow = null }
   app.cowActive = false
+  app.netMode = false
+  app.netSnaps = []
   app.ui.hud.classList.add('hidden')
   document.body.classList.remove('in-battle')
   app.ui.setVignette(false)
@@ -339,6 +445,7 @@ function cleanupFight() {
 
 function pauseGame() {
   if (app.state !== 'fight') return
+  if (app.netMode) return
   app.state = 'paused'
   app.input.enabled = false
   app.ui.show('pause')
@@ -355,6 +462,7 @@ function resumeGame() {
 }
 
 function quitToSelect() {
+  leaveNet()
   cleanupFight()
   app.local2p = false
   app.online.active = false
@@ -367,7 +475,12 @@ function quitToSelect() {
 }
 
 function rematch() {
-  if (app.online.active) { startFight(); return }
+  if (app.netMode && app.net) {
+    app.net.rematch()
+    const btn = document.getElementById('rematch-btn')
+    if (btn) btn.textContent = 'WAITING…'
+    return
+  }
   startFight()
 }
 
@@ -417,6 +530,7 @@ function frame(now) {
 function updateFight(realDt) {
   const m = app.match
   if (!m) return
+  if (app.netMode) { updateNetFight(realDt); return }
 
   if (app.cowActive && app.cow) {
     const done = app.cow.update(realDt)
@@ -468,20 +582,56 @@ function updateFight(realDt) {
     app.superSeq = null
   }
 
-  if (app.pendingResult) {
-    app.resultTimer -= realDt
-    if (app.resultTimer <= 0) {
-      const r = app.pendingResult
-      app.pendingResult = null
-      app.state = 'result'
-      app.input.enabled = false
-      app.ui.hud.classList.add('hidden')
-      app.ui.showResult(r)
-      app.audio.stopMusic()
-      app.audio.play(r.win ? 'win' : 'lose')
-      document.body.classList.remove('in-battle')
-    }
+  updatePendingResult(realDt)
+}
+
+function updateNetFight(realDt) {
+  const m = app.match
+  const input = app.input.getInput()
+  app.net?.sendInput(input)
+  app.input.endFrame()
+
+  let last = null
+  const events = []
+  while (app.netSnaps.length) {
+    const snap = app.netSnaps.shift()
+    last = snap
+    if (snap.events) events.push(...snap.events)
   }
+  if (last) {
+    applySnapshot(m, last)
+    for (const ev of events) handleEvent(ev)
+  }
+
+  updateRigs(realDt)
+  updateCamera(realDt)
+  app.ui.updateHud(m)
+  updateTicker(realDt)
+
+  if (m.phase === 'super' && app.superSeq) {
+    const done = app.superSeq.step(realDt)
+    if (done && app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
+  } else if (app.superSeq && m.phase !== 'super') {
+    app.superSeq.dispose()
+    app.superSeq = null
+  }
+
+  updatePendingResult(realDt)
+}
+
+function updatePendingResult(realDt) {
+  if (!app.pendingResult) return
+  app.resultTimer -= realDt
+  if (app.resultTimer > 0) return
+  const r = app.pendingResult
+  app.pendingResult = null
+  app.state = 'result'
+  app.input.enabled = false
+  app.ui.hud.classList.add('hidden')
+  app.ui.showResult(r)
+  app.audio.stopMusic()
+  app.audio.play(r.win ? 'win' : 'lose')
+  document.body.classList.remove('in-battle')
 }
 
 function spawnCow() {
@@ -732,10 +882,12 @@ function handleEvent(ev) {
       break
     }
     case 'matchEnd': {
-      const playerWon = ev.side === 0
+      const localSide = app.netMode ? app.netSide : 0
+      const playerWon = ev.side === localSide
+      const localWins = localSide === 0 ? [...ev.wins] : [ev.wins[1], ev.wins[0]]
       app.pendingResult = {
-        win: playerWon, winnerChar: m.fighters[ev.side].char.id, playerChar: m.fighters[0].char.id,
-        perfect: ev.perfect, timeUp: m.timeUp, wins: ev.wins,
+        win: playerWon, winnerChar: m.fighters[ev.side].char.id, playerChar: m.fighters[localSide].char.id,
+        perfect: ev.perfect, timeUp: m.timeUp, wins: localWins,
       }
       app.resultTimer = 2.1
       ui.announce(playerWon ? 'YOU WIN!' : 'YOU LOSE', playerWon ? 'win' : 'lose')
@@ -786,24 +938,170 @@ function worldScreen(x, y, z) {
 
 /* ------------------------------------------------------------------ online */
 
+function showOnlinePanel(name) {
+  for (const id of ['on-home', 'on-hosting', 'on-connecting', 'on-error']) {
+    document.getElementById(id)?.classList.toggle('hidden', id !== `on-${name}`)
+  }
+}
+
+function showNetError(text) {
+  app.state = 'online'
+  app.ui.show('online')
+  showOnlinePanel('error')
+  const el = document.getElementById('on-error-text')
+  if (el) el.textContent = text || 'Something went wrong.'
+}
+
+function setConnectingText(text) {
+  const el = document.getElementById('on-connecting-text')
+  if (el) el.textContent = text
+}
+
 function openOnline() {
+  leaveNet()
   app.state = 'online'
   app.ui.show('online')
   app.audio.play('select')
-  document.getElementById('on-home').classList.remove('hidden')
-  document.getElementById('on-hosting').classList.add('hidden')
-  document.getElementById('on-connecting').classList.add('hidden')
-  document.getElementById('on-error').classList.add('hidden')
+  showOnlinePanel('home')
+  const room = new URLSearchParams(location.search).get('room')
+  if (room) {
+    const input = document.getElementById('on-code')
+    if (input) input.value = room.toUpperCase().slice(0, 6)
+  }
 }
 
 function closeOnline() {
+  leaveNet()
   app.state = 'select'
   app.ui.show('select')
   app.ui.renderSelect(selectState())
   if (!app.preview.length) refreshPreview()
 }
 
+function leaveNet() {
+  if (app.net) {
+    try { app.net.leave() } catch {}
+    app.net = null
+  }
+  app.netRoom = null
+  app.netMode = false
+  app.netStarted = false
+  app.netSnaps = []
+  app.online.active = false
+  app.online.guest = false
+  app.online.canFight = false
+  app.online.status = ''
+  document.getElementById('net-away')?.classList.add('hidden')
+  const btn = document.getElementById('fight-btn')
+  if (btn) { btn.textContent = 'FIGHT!'; btn.classList.remove('waiting') }
+}
+
+function hostRoom() {
+  leaveNet()
+  showOnlinePanel('connecting')
+  setConnectingText('Opening room…')
+  const net = new NetClient({
+    onOpen: () => net.send({ t: 'create' }),
+    onMessage: onNetMessage,
+    onClose: () => onNetClosed(net),
+    onError: () => showNetError('Could not reach the room server.'),
+  })
+  app.net = net
+  net.connect()
+}
+
+function joinRoom(code) {
+  if (!code || code.length < 4) { showNetError('Enter a valid room code.'); return }
+  leaveNet()
+  showOnlinePanel('connecting')
+  setConnectingText('Connecting…')
+  const net = new NetClient({
+    onOpen: () => net.send({ t: 'join', code: String(code).toUpperCase() }),
+    onMessage: onNetMessage,
+    onClose: () => onNetClosed(net),
+    onError: () => showNetError('Could not reach the room server.'),
+  })
+  app.net = net
+  net.connect()
+}
+
+function onNetMessage(msg) {
+  if (!msg || !msg.t) return
+  switch (msg.t) {
+    case 'created': {
+      app.netSide = 0
+      app.netRoom = { code: msg.code, hostChar: null, guestChar: null, stage: 'sansad' }
+      app.online.active = false
+      app.online.guest = false
+      app.online.status = 'Waiting for your friend…'
+      showOnlinePanel('hosting')
+      const codeEl = document.getElementById('on-room-code')
+      if (codeEl) codeEl.textContent = msg.code
+      break
+    }
+    case 'joined': {
+      app.netSide = app.net?.side ?? msg.side ?? 0
+      app.online.active = true
+      app.online.guest = app.netSide === 1
+      app.online.canFight = false
+      app.online.status = 'Friend connected'
+      app.select.picking = app.netSide === 0 ? 'p1' : 'p2'
+      app.state = 'select'
+      app.ui.show('select')
+      app.ui.renderSelect(selectState())
+      refreshPreview()
+      app.audio.play('confirm')
+      break
+    }
+    case 'room': {
+      app.netRoom = msg
+      app.select.p1 = msg.hostChar || app.select.p1
+      app.select.p2 = msg.guestChar || app.select.p2
+      app.select.stage = msg.stage || app.select.stage
+      app.online.canFight = !!(msg.hostChar && msg.guestChar)
+      app.online.guest = app.netSide === 1
+      if (app.state === 'select') {
+        app.arena.setStage(app.select.stage)
+        app.ui.renderSelect(selectState())
+      }
+      break
+    }
+    case 'start':
+      startNetFight(msg)
+      break
+    case 'snap':
+      app.netSnaps.push(msg)
+      if (app.netSnaps.length > 90) app.netSnaps.shift()
+      break
+    case 'peerLeft':
+      showNetAway('Your friend left the room.')
+      break
+    case 'error':
+      showNetError(msg.error)
+      break
+    case 'left':
+      leaveNet()
+      showOnlinePanel('home')
+      break
+  }
+}
+
+function onNetClosed(net) {
+  if (app.net !== net) return
+  if (app.state === 'fight') showNetAway('Connection lost.')
+  else if (app.state === 'online') showNetError('Connection lost.')
+}
+
+function showNetAway(text) {
+  const el = document.getElementById('net-away')
+  if (!el) return
+  const span = el.querySelector('.net-away-msg span')
+  if (span) span.textContent = text || 'Waiting for your friend…'
+  el.classList.remove('hidden')
+}
+
 function startLocal2p() {
+  leaveNet()
   app.local2p = true
   app.online.active = true
   app.online.guest = false
@@ -817,6 +1115,7 @@ function startLocal2p() {
 }
 
 function leaveOnline() {
+  leaveNet()
   app.local2p = false
   app.online.active = false
   app.online.guest = false
@@ -826,16 +1125,32 @@ function leaveOnline() {
   app.audio.play('back')
 }
 
-document.getElementById('on-host')?.addEventListener('click', () => {
-  document.getElementById('on-hosting').classList.remove('hidden')
-  document.getElementById('on-room-code').textContent = 'LOCAL'
-  document.getElementById('on-error').classList.remove('hidden')
-  document.getElementById('on-error-text').textContent = 'Online rooms need a relay server. This build supports CPU and local play.'
-})
+document.getElementById('on-host')?.addEventListener('click', hostRoom)
 document.getElementById('on-join-form')?.addEventListener('submit', (e) => {
   e.preventDefault()
-  document.getElementById('on-error').classList.remove('hidden')
-  document.getElementById('on-error-text').textContent = 'No relay server configured in this build. Try CPU mode!'
+  const code = document.getElementById('on-code')?.value || ''
+  joinRoom(code)
+})
+document.getElementById('on-copy')?.addEventListener('click', async () => {
+  const code = app.netRoom?.code || ''
+  const url = `${location.origin}${location.pathname}?room=${code}`
+  try {
+    await navigator.clipboard.writeText(url)
+    const btn = document.getElementById('on-copy')
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy link' }, 1200) }
+  } catch {
+    const input = document.getElementById('on-code')
+    if (input) input.value = code
+  }
+})
+document.getElementById('on-wa')?.addEventListener('click', () => {
+  const code = app.netRoom?.code || ''
+  const text = encodeURIComponent(`Fight me in Sansad Showdown! Room code: ${code} — ${location.origin}${location.pathname}?room=${code}`)
+  window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener')
+})
+document.getElementById('net-away-leave')?.addEventListener('click', () => {
+  leaveNet()
+  quitToSelect()
 })
 
 /* ------------------------------------------------------------------ start */

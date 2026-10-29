@@ -8,17 +8,20 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run test:engine && npm run test:ai && npm run test:supers && npm run test:e2e && npm run test:local2p && npm run test:cow",
+    "serve": "node server/serve.mjs",
+    "test": "npm run test:engine && npm run test:ai && npm run test:supers && npm run test:e2e && npm run test:local2p && npm run test:online && npm run test:cow",
     "test:engine": "node tests/engine.test.mjs",
     "test:ai": "node tests/ai.test.mjs",
     "test:supers": "node tests/supers.test.mjs",
     "test:e2e": "node tests/smoke.mjs",
     "test:local2p": "node tests/local2p.mjs",
+    "test:online": "node tests/online.mjs",
     "test:cow": "node tests/cow.mjs",
     "test:stages": "node tests/stages.mjs"
   },
   "dependencies": {
-    "three": "0.169.0"
+    "three": "0.169.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "playwright": "1.47.2",

@@ -218,7 +218,6 @@ body.online .online-bar { display: flex; align-items: center; gap: 14px; font-si
 body.online .online-bar button { padding: 2px 12px; font-size: 16px; }
 body.online .cpu-level { display: none !important; }
 body.online .online-btn { display: none; }
-body.online #select .tile.p2 { pointer-events: none; }
 
 .controls {
   position: absolute; top: calc(18px + clamp(34px, 4.4vw, 62px)); left: 50%;

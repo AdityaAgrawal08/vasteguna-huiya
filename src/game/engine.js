@@ -1,5 +1,5 @@
 import {
-  CHARACTERS, MOVES, ARENA_HALF_WIDTH, pickMove,
+  CHARACTERS, MOVES, ARENA_HALF_WIDTH, pickMove, MOVE_LABELS,
 } from './data.js'
 
 export const FPS = 60
@@ -499,7 +499,7 @@ export class Match {
     defender.addMeter(dmg * 0.6)
     attacker.vx = -dir * a.def.push * 0.8
     this.emit({
-      type: 'hit', side: attacker.side, move: attacker.char.moveNames[a.def.id] || 'HIT!',
+      type: 'hit', side: attacker.side, move: attacker.char.moveNames[a.def.id] || MOVE_LABELS[a.def.id] || 'HIT!',
       x: hitX, y: hitY, damage: dmg, knockdown: defender.state === 'knockdown',
       ko: defender.state === 'ko', height, combo: defender.comboHits,
     })

@@ -57,6 +57,8 @@ Stages: Sansad Bhavan, Jantar Mantar, Desi Sadak. CPU difficulty: Easy / Normal 
 - `src/game/audio.js` — WebAudio SFX and procedural music
 - `src/ui.js`, `src/style.css`, `index.html` — screens, HUD, newsdesk, newspaper
 - `src/input.js` — keyboard + touch input
+- `src/net.js`, `src/game/remote.js` — room client and snapshot-driven remote match
+- `server/roomServer.js`, `server/serve.mjs` — authoritative room server and production host
 - `src/portraits.js` — canvas caricature portraits
 
 ## Tests
@@ -67,6 +69,7 @@ npm run test:ai       # CPU vs CPU matches on all three difficulties
 npm run test:supers   # all six cinematic super sequences build, animate and dispose
 npm run test:e2e      # Playwright: title → select → fight → hit → pause → result → rematch → super
 npm run test:local2p  # Playwright: friend-room → same-device 2P controls
+npm run test:online   # Playwright: two browsers, room code, picks, net fight
 npm run test:cow      # Playwright: the stray-cow stage interruption
 npm run test:stages   # Playwright: all three stages render and start a fight
 ```
@@ -75,11 +78,18 @@ The e2e run writes screenshots to `tests/screenshots/`. The browser tests use
 `?quality=low` so they run at a usable speed under software WebGL; the game itself
 defaults to the full-quality renderer (shadows, particles, high pixel ratio).
 
-## Note on online play
+## Online friend rooms
 
-The original site pairs two browsers through a WebRTC relay service. This build ships
-CPU play plus a same-device 2-player mode (P2: arrow keys to move, numpad 1/2/3 to
-punch/kick/grab, numpad 0 for super). The friend-room screen keeps the room-code flow
-and explains that a relay server is required for cross-device play. The deterministic
-match simulation is ready to be driven by a netcode adapter (the engine consumes two
-input structs per frame).
+Cross-device rooms are built in. `npm run dev` attaches the room WebSocket to the
+Vite server; for production run `npm run build` and then `npm run serve` (port 4180).
+
+1. `PLAY WITH A FRIEND` → `HOST A ROOM`; share the 6-character code (or the link).
+2. Your friend opens the link, enters the code and joins.
+3. Both pick a neta; the host picks the stage. Both press `FIGHT!`.
+4. The server runs the authoritative 60 Hz match and broadcasts snapshots at 30 Hz.
+   Inputs are buffered so combos, specials and supers work over the room.
+5. Rematch and disconnect handling are included.
+
+Same-device 2-player is also available: P2 uses the arrow keys to move and numpad
+1/2/3/0 for punch/kick/grab/super. The deterministic match simulation is reusable
+for any future netcode adapter (the engine consumes two input structs per frame).
