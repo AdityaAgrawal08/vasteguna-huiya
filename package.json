@@ -1,0 +1,27 @@
+{
+  "name": "sansad-showdown",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sansad Showdown — a Tekken-style 3D political parody fighter",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "npm run test:engine && npm run test:ai && npm run test:supers && npm run test:e2e && npm run test:local2p && npm run test:cow",
+    "test:engine": "node tests/engine.test.mjs",
+    "test:ai": "node tests/ai.test.mjs",
+    "test:supers": "node tests/supers.test.mjs",
+    "test:e2e": "node tests/smoke.mjs",
+    "test:local2p": "node tests/local2p.mjs",
+    "test:cow": "node tests/cow.mjs",
+    "test:stages": "node tests/stages.mjs"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "playwright": "1.47.2",
+    "vite": "5.4.11"
+  }
+}

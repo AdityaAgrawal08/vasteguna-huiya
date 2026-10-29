@@ -1,0 +1,843 @@
+import * as THREE from 'three'
+import './style.css'
+import {
+  CHARACTERS, ROSTER, STAGES, COMMENTARY, ARENA_HALF_WIDTH,
+} from './game/data.js'
+import { Match, DT, makeInput } from './game/engine.js'
+import { CPU } from './game/ai.js'
+import { createArena } from './game/arena.js'
+import { createFighterRig } from './game/fighters3d.js'
+import { createAudio } from './game/audio.js'
+import { createFX } from './game/fx.js'
+import { createSuperSequence } from './game/supers.js'
+import { createCow } from './game/cow.js'
+import { Input, isTouchDevice } from './input.js'
+import { UI } from './ui.js'
+import { portrait } from './portraits.js'
+
+const app = {
+  state: 'loading',
+  renderer: null,
+  scene: null,
+  arena: null,
+  camera: null,
+  fx: null,
+  audio: null,
+  ui: null,
+  input: null,
+  match: null,
+  cpu: null,
+  rigs: [null, null],
+  superSeq: null,
+  preview: [],
+  cow: null,
+  cowActive: false,
+  cowUsed: false,
+  shake: 0,
+  shakeTime: 0,
+  time: 0,
+  resultTimer: 0,
+  pendingResult: null,
+  tickerTimer: 0,
+  select: { p1: 'modi', p2: 'rahul', stage: 'sansad', difficulty: 'normal', picking: 'p1' },
+  online: { active: false, guest: false, room: null, status: '', canFight: false },
+  local2p: false,
+  superOverlayTime: 0,
+  musicOn: true,
+  muted: false,
+  cameraTarget: new THREE.Vector3(0, 1.2, 0),
+  cameraPos: new THREE.Vector3(0, 3, 11),
+  lastPose: [null, null],
+}
+
+/* ------------------------------------------------------------------ boot */
+
+function boot() {
+  const canvas = document.getElementById('game')
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  renderer.setSize(innerWidth, innerHeight)
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  app.renderer = renderer
+
+  const scene = new THREE.Scene()
+  app.scene = scene
+
+  const arena = createArena(scene, renderer, 'sansad')
+  app.arena = arena
+  app.camera = arena.camera
+
+  const params = new URLSearchParams(location.search)
+  app.lowQuality = params.get('quality') === 'low'
+  if (app.lowQuality) {
+    renderer.setPixelRatio(1)
+    renderer.shadowMap.enabled = false
+    arena.setQuality('low')
+  }
+
+  app.fx = createFX(scene)
+  app.audio = createAudio()
+  app.ui = new UI()
+  app.input = new Input()
+  app.input.bindTouch(document.getElementById('touch'))
+
+  if (isTouchDevice()) {
+    document.documentElement.classList.add('touch')
+  }
+
+  app.ui.onTile = (id) => pickTile(id)
+  app.ui.onPlate = (which) => { app.select.picking = which === 'p1' ? 'p1' : 'p2'; app.ui.renderSelect(selectState()) }
+  app.ui.onStage = (stage) => { app.select.stage = stage; app.arena.setStage(stage); app.ui.renderSelect(selectState()) }
+  app.ui.onDiff = (diff) => { app.select.difficulty = diff; app.ui.renderSelect(selectState()) }
+
+  bindGlobal()
+  bindScreens()
+
+  window.addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight)
+    app.camera.aspect = innerWidth / innerHeight
+    app.camera.updateProjectionMatrix()
+  })
+
+  // fake asset load with a real progress feel
+  let p = 0
+  const loadTimer = setInterval(() => {
+    p += 0.07 + Math.random() * 0.08
+    app.ui.setLoading(p)
+    if (p >= 1) {
+      clearInterval(loadTimer)
+      app.ui.setLoading(1)
+      setTimeout(() => {
+        app.state = 'title'
+        app.ui.show('title')
+        app.ui.setSoundIcon(app.muted)
+        app.audio.startMusic('sansad')
+      }, 260)
+    }
+  }, 70)
+
+  requestAnimationFrame(frame)
+}
+
+/* ------------------------------------------------------------------ screens */
+
+function bindGlobal() {
+  app.input.onGlobal = (e) => {
+    if (app.state === 'title') {
+      if (e.code === 'Enter' || e.code === 'Space') startSelect()
+      return
+    }
+    if (app.state === 'select') {
+      if (e.code === 'Enter') { if (!app.online.active || app.online.canFight) startFight(); return }
+      if (e.code === 'Escape') { goTitle(); return }
+      if (e.code === 'ArrowLeft') { movePick('p1', -1); return }
+      if (e.code === 'ArrowRight') { movePick('p1', 1); return }
+      if (e.code === 'ArrowUp') { movePick('p2', -1); return }
+      if (e.code === 'ArrowDown') { movePick('p2', 1); return }
+      if (e.code === 'KeyT') { cycleStage(); return }
+      if (e.code === 'Digit1') { setDiff('easy'); return }
+      if (e.code === 'Digit2') { setDiff('normal'); return }
+      if (e.code === 'Digit3') { setDiff('hard'); return }
+      return
+    }
+    if (app.state === 'fight') {
+      if (e.code === 'Escape') { pauseGame(); return }
+      if (e.code === 'KeyM') { toggleMusic(); return }
+      if (e.code === 'KeyN') { toggleMute(); return }
+      return
+    }
+    if (app.state === 'paused') {
+      if (e.code === 'Escape' || e.code === 'Enter') resumeGame()
+      return
+    }
+    if (app.state === 'result') {
+      if (e.code === 'Enter') rematch()
+    }
+  }
+}
+
+function bindScreens() {
+  document.getElementById('title').addEventListener('pointerdown', () => startSelect())
+  document.getElementById('fight-btn').addEventListener('click', () => {
+    if (!app.online.active || app.online.canFight) startFight()
+  })
+  document.getElementById('resume-btn').addEventListener('click', resumeGame)
+  document.getElementById('quit-btn').addEventListener('click', quitToSelect)
+  document.getElementById('pause-sound-btn').addEventListener('click', toggleMute)
+  document.getElementById('pause-btn').addEventListener('click', pauseGame)
+  document.getElementById('rematch-btn').addEventListener('click', rematch)
+  document.getElementById('select-btn').addEventListener('click', quitToSelect)
+  document.getElementById('sound-btn').addEventListener('click', toggleMute)
+  document.getElementById('online-btn').addEventListener('click', openOnline)
+  document.getElementById('on-back').addEventListener('click', closeOnline)
+  document.getElementById('on-local').addEventListener('click', startLocal2p)
+  document.getElementById('online-leave').addEventListener('click', leaveOnline)
+
+  const unlock = () => {
+    app.audio.unlock()
+    document.removeEventListener('pointerdown', unlock)
+    document.removeEventListener('keydown', unlock)
+  }
+  document.addEventListener('pointerdown', unlock)
+  document.addEventListener('keydown', unlock)
+}
+
+function startSelect() {
+  app.audio.unlock()
+  app.state = 'select'
+  app.ui.show('select')
+  app.ui.renderSelect(selectState())
+  app.arena.setStage(app.select.stage)
+  refreshPreview()
+}
+
+function refreshPreview() {
+  disposePreview()
+  if (app.state !== 'select') return
+  const ids = [app.select.p1, app.select.p2]
+  for (let i = 0; i < 2; i++) {
+    const rig = createFighterRig(ids[i])
+    rig.root.position.set(i === 0 ? -2.6 : 2.6, 0, 0)
+    rig.setFacing(i === 0 ? 1 : -1)
+    app.scene.add(rig.root)
+    app.preview.push(rig)
+  }
+}
+
+function disposePreview() {
+  for (const r of app.preview) { app.scene.remove(r.root); r.dispose() }
+  app.preview = []
+}
+
+function goTitle() {
+  app.state = 'title'
+  app.ui.show('title')
+  app.arena.setStage('sansad')
+  disposePreview()
+}
+
+function selectState() {
+  return {
+    ...app.select,
+    online: app.online.active,
+    guest: app.online.guest,
+    onlineStatus: app.online.status,
+    canFight: app.online.canFight,
+    taken: app.online.taken,
+  }
+}
+
+function pickTile(id) {
+  const other = app.select.picking === 'p1' ? app.select.p2 : app.select.p1
+  let chosen = id
+  if (id === 'random') {
+    const pool = ROSTER.filter((r) => r !== other)
+    chosen = pool[Math.floor(Math.random() * pool.length)]
+  }
+  if (app.select.picking === 'p1') {
+    app.select.p1 = chosen
+    app.select.picking = 'p2'
+  } else {
+    app.select.p2 = chosen
+    app.select.picking = 'p1'
+  }
+  app.ui.renderSelect(selectState())
+  app.audio.play('select')
+  refreshPreview()
+}
+
+function movePick(which, dir) {
+  const key = which === 'p1' ? 'p1' : 'p2'
+  let i = ROSTER.indexOf(app.select[key])
+  i = (i + dir + ROSTER.length) % ROSTER.length
+  app.select[key] = ROSTER[i]
+  app.select.picking = which
+  app.ui.renderSelect(selectState())
+  app.audio.play('move')
+  refreshPreview()
+}
+
+function cycleStage() {
+  const keys = Object.keys(STAGES)
+  const i = keys.indexOf(app.select.stage)
+  app.select.stage = keys[(i + 1) % keys.length]
+  app.arena.setStage(app.select.stage)
+  app.ui.renderSelect(selectState())
+  app.audio.play('move')
+}
+
+function setDiff(d) {
+  app.select.difficulty = d
+  app.ui.renderSelect(selectState())
+  app.audio.play('move')
+}
+
+/* ------------------------------------------------------------------ fight */
+
+function startFight() {
+  if (app.online.active && !app.online.canFight) return
+  app.audio.unlock()
+  app.audio.play('fight')
+  cleanupFight()
+  disposePreview()
+
+  const { p1, p2, stage, difficulty } = app.select
+  app.match = new Match({ p1, p2, stage, difficulty })
+  app.cpu = new CPU(app.match, 1, difficulty)
+  app.rigs = [createFighterRig(p1), createFighterRig(p2)]
+  for (const r of app.rigs) app.scene.add(r.root)
+  app.rigs[0].root.position.set(app.match.fighters[0].x, 0, 0)
+  app.rigs[1].root.position.set(app.match.fighters[1].x, 0, 0)
+  app.rigs[0].setFacing(1)
+  app.rigs[1].setFacing(-1)
+
+  app.arena.setStage(stage)
+  app.ui.setHudChars(p1, p2)
+  app.ui.setAnchors([p1, p2])
+  app.ui.hud.classList.remove('hidden')
+  app.ui.show(null)
+  app.ui.setVignette(false)
+  app.ui.timerEl.textContent = '60'
+  for (const el of document.querySelectorAll('#hud .win')) el.classList.remove('on')
+  app.ui.tickerTrack.innerHTML = ''
+  app.ui.tickerItems = []
+  app.ui.tickerOffset = 0
+  for (let i = 0; i < 3; i++) app.ui.pushTicker(COMMENTARY.filler[i])
+  app.ui.pushTicker('BREAKING: The tournament begins. Experts are already arguing.', true)
+
+  document.body.classList.add('in-battle')
+  app.input.enabled = true
+  app.state = 'fight'
+  app.shake = 0
+  app.superSeq = null
+  app.cow = null
+  app.cowActive = false
+  app.cowUsed = false
+  app.resultTimer = 0
+  app.pendingResult = null
+  app.match.start()
+  app.audio.startMusic(stage)
+  app.ui.updateHud(app.match)
+}
+
+function cleanupFight() {
+  app.input.enabled = false
+  for (const r of app.rigs) {
+    if (r) { app.scene.remove(r.root); r.dispose() }
+  }
+  app.rigs = [null, null]
+  if (app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
+  if (app.cow) { app.cow.dispose(); app.cow = null }
+  app.cowActive = false
+  app.ui.hud.classList.add('hidden')
+  document.body.classList.remove('in-battle')
+  app.ui.setVignette(false)
+}
+
+function pauseGame() {
+  if (app.state !== 'fight') return
+  app.state = 'paused'
+  app.input.enabled = false
+  app.ui.show('pause')
+  app.ui.setPauseSound(!app.muted)
+  app.audio.play('back')
+}
+
+function resumeGame() {
+  if (app.state !== 'paused') return
+  app.state = 'fight'
+  app.input.enabled = true
+  app.ui.hideScreens()
+  app.audio.play('confirm')
+}
+
+function quitToSelect() {
+  cleanupFight()
+  app.local2p = false
+  app.online.active = false
+  app.online.canFight = false
+  app.state = 'select'
+  app.ui.show('select')
+  app.ui.renderSelect(selectState())
+  app.audio.startMusic('sansad')
+  refreshPreview()
+}
+
+function rematch() {
+  if (app.online.active) { startFight(); return }
+  startFight()
+}
+
+function toggleMute() {
+  app.muted = !app.muted
+  app.audio.setMuted(app.muted)
+  app.ui.setSoundIcon(app.muted)
+  app.ui.setPauseSound(!app.muted)
+}
+
+function toggleMusic() {
+  app.musicOn = !app.musicOn
+  app.audio.setMusicEnabled(app.musicOn)
+}
+
+/* ------------------------------------------------------------------ loop */
+
+let last = performance.now()
+let acc = 0
+
+function frame(now) {
+  requestAnimationFrame(frame)
+  const realDt = Math.min(0.1, (now - last) / 1000)
+  last = now
+  app.time += realDt
+
+  if (app.state === 'fight') {
+    updateFight(realDt)
+  } else if (app.state === 'paused') {
+    // hold everything
+  } else if (app.state === 'result') {
+    app.resultTimer -= realDt
+    updateRigs(realDt)
+    updateCamera(realDt)
+  } else {
+    updateAmbient(realDt)
+    updateCamera(realDt)
+    if (app.state === 'select') updatePreview(realDt)
+  }
+
+  app.fx.update(realDt)
+  app.ui.updateTicker(realDt)
+  app.arena.update(realDt, app.time)
+  app.renderer.render(app.scene, app.camera)
+}
+
+function updateFight(realDt) {
+  const m = app.match
+  if (!m) return
+
+  if (app.cowActive && app.cow) {
+    const done = app.cow.update(realDt)
+    if (done) {
+      app.cow.dispose()
+      app.cow = null
+      app.cowActive = false
+      app.ui.announce('RESUME!', 'fight')
+      app.ui.commentary('godi', 'The cow has blessed the fight. Resume!')
+      app.ui.commentary('troll', 'Cow left. Back to business, chat!')
+      app.ui.pushTicker('BREAKING: Stray cow exits stage left. Fight resumes.', true)
+      app.audio.play('bell')
+    }
+    updateRigs(realDt)
+    updateCamera(realDt)
+    app.ui.updateHud(m)
+    updateTicker(realDt)
+    app.input.endFrame()
+    return
+  }
+
+  const scale = m.slowMo > 0 ? 0.32 : 1
+  acc += realDt * scale
+  let steps = 0
+  while (acc >= DT && steps < 8) {
+    const inp = app.input.getInput()
+    const cpuInp = app.local2p ? app.input.getP2Input() : app.cpu.update()
+    m.step([inp, cpuInp], DT)
+    app.input.endFrame()
+    acc -= DT
+    steps++
+  }
+  if (steps === 8) acc = 0
+
+  for (const ev of m.drainEvents()) handleEvent(ev)
+
+  if (!app.cowUsed && m.phase === 'fight' && m.timer <= 45) spawnCow()
+
+  updateRigs(realDt)
+  updateCamera(realDt)
+  app.ui.updateHud(m)
+  updateTicker(realDt)
+
+  if (m.phase === 'super' && app.superSeq) {
+    const done = app.superSeq.step(realDt)
+    if (done && app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
+  } else if (app.superSeq && m.phase !== 'super') {
+    app.superSeq.dispose()
+    app.superSeq = null
+  }
+
+  if (app.pendingResult) {
+    app.resultTimer -= realDt
+    if (app.resultTimer <= 0) {
+      const r = app.pendingResult
+      app.pendingResult = null
+      app.state = 'result'
+      app.input.enabled = false
+      app.ui.hud.classList.add('hidden')
+      app.ui.showResult(r)
+      app.audio.stopMusic()
+      app.audio.play(r.win ? 'win' : 'lose')
+      document.body.classList.remove('in-battle')
+    }
+  }
+}
+
+function spawnCow() {
+  app.cowUsed = true
+  app.cowActive = true
+  app.cow = createCow(app.scene)
+  app.ui.announce('GAU MATA!', 'cow')
+  app.ui.commentary('godi', 'Gau Mata on stage! The fight pauses with full respect.')
+  app.ui.commentary('troll', 'The cow has better timing than both of them.')
+  app.ui.pushTicker('BREAKING: Stray cow halts the tournament. Nobody dares to honk.', true)
+  app.audio.play('moo')
+}
+
+function updateRigs(dt) {
+  const m = app.match
+  if (!m) return
+  for (let i = 0; i < 2; i++) {
+    const f = m.fighters[i]
+    const rig = app.rigs[i]
+    if (!rig) continue
+    if (m.phase === 'super' && app.superSeq) {
+      app.superSeq.updateRig(i, dt)
+      continue
+    }
+    rig.root.position.set(f.x, f.y, 0)
+    rig.setFacing(f.facing)
+    rig.update(poseFor(f), dt)
+  }
+}
+
+function poseFor(f) {
+  return {
+    state: f.state,
+    stateTime: f.stateFrames / 60,
+    attackId: f.attack?.def.id,
+    phase: f.attackPhase,
+    attackFrame: f.attack?.frame || 0,
+    startup: f.attack?.def.startup || 1,
+    crouching: f.crouching,
+    facing: f.facing,
+    x: f.x,
+    y: f.y,
+    vx: f.vx,
+    vy: f.vy,
+    airborne: f.airborne,
+    blocking: f.state === 'blockstun' || (f.holdingBack && f.actionable),
+    ko: f.state === 'ko',
+    victory: f.state === 'victory',
+    flash: f.flash > 0,
+    comboHits: f.comboHits,
+  }
+}
+
+function updateAmbient(dt) {
+  // idle camera work is handled in updateCamera
+}
+
+function updatePreview(dt) {
+  for (let i = 0; i < app.preview.length; i++) {
+    app.preview[i].update({
+      state: 'idle', stateTime: app.time + i * 0.7, facing: i === 0 ? 1 : -1,
+      x: i === 0 ? -2.6 : 2.6, y: 0, vx: 0, vy: 0, airborne: false,
+      blocking: false, ko: false, victory: false,
+    }, dt)
+  }
+}
+
+/* ------------------------------------------------------------------ camera */
+
+function updateCamera(dt) {
+  const cam = app.camera
+  if (!cam) return
+  const m = app.match
+  const t = app.time
+
+  if (app.state === 'title' || app.state === 'select') {
+    if (app.state === 'title') {
+      const a = t * 0.06
+      cam.position.set(Math.sin(a) * 14, 6.2 + Math.sin(t * 0.2) * 0.2, Math.cos(a) * 14 + 2)
+      cam.lookAt(0, 1.4, 0)
+    } else {
+      const a = Math.sin(t * 0.09) * 0.55
+      cam.position.set(Math.sin(a) * 8.8, 3.1, Math.cos(a) * 8.8)
+      cam.lookAt(0, 1.15, 0)
+    }
+    cam.fov = 45
+    cam.updateProjectionMatrix()
+    return
+  }
+
+  if (!m) return
+
+  if (app.state === 'result') {
+    const a = t * 0.1
+    cam.position.set(Math.sin(a) * 9, 3.2, Math.cos(a) * 9 + 2)
+    cam.lookAt(0, 1.3, 0)
+    cam.fov = 44
+    cam.updateProjectionMatrix()
+    return
+  }
+
+  if (m.phase === 'super' && app.superSeq) {
+    const c = app.superSeq.camera
+    cam.position.lerp(c.position, 1 - Math.exp(-6 * dt))
+    app.cameraTarget.lerp(c.lookAt, 1 - Math.exp(-6 * dt))
+    cam.lookAt(app.cameraTarget)
+    cam.fov += ((c.fov || 44) - cam.fov) * (1 - Math.exp(-4 * dt))
+    cam.updateProjectionMatrix()
+    return
+  }
+
+  const [a, b] = m.fighters
+  const mid = (a.x + b.x) / 2
+  const dist = Math.abs(a.x - b.x)
+  const maxY = Math.max(a.y, b.y)
+  const intro = m.phase === 'intro' ? Math.max(0, 1 - m.phaseTime / 1.9) : 0
+
+  let px = mid * 0.55
+  let py = 2.6 + maxY * 0.18
+  let pz = 9.2 - Math.min(2.0, dist * 0.1)
+  if (intro > 0) {
+    px += intro * 3.2
+    py += intro * 0.5
+    pz -= intro * 1.8
+  }
+
+  app.cameraPos.set(px, py, pz)
+  app.cameraTarget.set(mid * 0.6, 1.22 + maxY * 0.3, 0)
+
+  cam.position.lerp(app.cameraPos, 1 - Math.exp(-7 * dt))
+  const look = app.cameraTarget
+  cam.lookAt(look)
+
+  if (app.shake > 0.001) {
+    cam.position.x += (Math.random() - 0.5) * app.shake
+    cam.position.y += (Math.random() - 0.5) * app.shake
+    app.shake *= Math.exp(-8 * dt)
+  }
+  const fov = 42 + Math.min(4, dist * 0.15)
+  cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt))
+  cam.updateProjectionMatrix()
+}
+
+/* ------------------------------------------------------------------ events */
+
+function handleEvent(ev) {
+  const ui = app.ui
+  const audio = app.audio
+  const m = app.match
+  switch (ev.type) {
+    case 'roundStart': {
+      const final = ev.final
+      ui.announce(`ROUND ${ev.round}`)
+      ui.setVignette(false)
+      audio.play('bell')
+      audio.play('round')
+      const godi = m.fighters[0].char.id === 'modi' || m.fighters[1].char.id === 'rahul' ? 0 : 1
+      ui.commentary('godi', final ? COMMENTARY.finalRound.godi : COMMENTARY.roundStart.godi.replace('{R}', ev.round).replace('{G}', m.fighters[godi].char.fullName))
+      ui.commentary('troll', final ? COMMENTARY.finalRound.troll : COMMENTARY.roundStart.troll.replace('{R}', ev.round))
+      ui.pushTicker(final ? 'FINAL ROUND: Both camps claim the momentum is theirs' : `ROUND ${ev.round}: The crowd settles in with samosas`, true)
+      break
+    }
+    case 'fight':
+      ui.announce('FIGHT!', 'fight')
+      audio.play('fight')
+      setTimeout(() => {
+        if (app.state !== 'fight') return
+        const [a, b] = m.fighters
+        const pa = worldScreen(a.x, 2.25, 0)
+        const pb = worldScreen(b.x, 2.25, 0)
+        ui.speech(a.char.introLine, pa.x, pa.y)
+        setTimeout(() => {
+          if (app.state !== 'fight') return
+          ui.speech(b.char.introLine, pb.x, pb.y)
+        }, 500)
+      }, 350)
+      break
+    case 'hit': {
+      const pos = worldScreen(ev.x, ev.y, 0)
+      ui.popup(`-${ev.damage}`, pos.x, pos.y - 30, ev.knockdown ? 'crit' : '')
+      if (ev.move) ui.popup(ev.move, pos.x, pos.y + 16)
+      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), ev.knockdown ? 'red' : 'gold', ev.knockdown ? 22 : 12, ev.knockdown ? 4 : 2.6)
+      app.fx.ring(new THREE.Vector3(ev.x, ev.y, 0), ev.knockdown ? 0xff5a3a : 0xffc040)
+      app.shake = Math.max(app.shake, ev.knockdown ? 0.42 : 0.2)
+      audio.play(ev.knockdown ? 'heavy' : ev.height === 'low' ? 'kick' : 'punch')
+      if (ev.ko) audio.play('ko')
+      if (ev.combo >= 2) ui.combo(ev.side, ev.combo)
+      commentaryForHit(ev)
+      break
+    }
+    case 'block': {
+      const pos = worldScreen(ev.x, ev.y, 0)
+      ui.popup('BLOCKED', pos.x, pos.y - 20)
+      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), 'blue', 8, 2)
+      app.shake = Math.max(app.shake, 0.1)
+      audio.play('block')
+      const which = ev.side === 0 ? 'godi' : 'troll'
+      ui.commentary(which, pick(COMMENTARY.block))
+      break
+    }
+    case 'grab': {
+      const pos = worldScreen(ev.x, ev.y, 0)
+      ui.popup(ev.move, pos.x, pos.y)
+      app.shake = Math.max(app.shake, 0.25)
+      audio.play('grab')
+      break
+    }
+    case 'grabBreak':
+      ui.popup('GRAB BREAK!', innerWidth / 2, innerHeight * 0.4)
+      audio.play('grabBreak')
+      break
+    case 'superStart': {
+      ui.showSuperBanner(ev.charId, CHARACTERS[ev.charId].name, ev.superName, ev.side)
+      ui.setVignette(true)
+      audio.play('super')
+      audio.play('charge')
+      app.superSeq = createSuperSequence({
+        scene: app.scene, camera: app.camera, rigs: app.rigs, side: ev.side,
+        charId: ev.charId, audio, fx: app.fx, fighters: m.fighters,
+      })
+      break
+    }
+    case 'superHit': {
+      ui.flash('#fff', 260)
+      app.shake = 0.7
+      audio.play('boom')
+      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), 'red', 40, 6)
+      app.fx.ring(new THREE.Vector3(ev.x, ev.y, 0), 0xff6a00)
+      ui.setVignette(false)
+      break
+    }
+    case 'suddenDeath':
+      ui.announce('SUDDEN DEATH!', 'fight')
+      audio.play('timeup')
+      break
+    case 'ko': {
+      ui.announce(ev.timeUp ? 'TIME UP' : 'K.O.', ev.timeUp ? '' : 'ko')
+      audio.play(ev.timeUp ? 'timeup' : 'ko')
+      app.shake = 0.6
+      ui.setVignette(true)
+      if (ev.perfect) setTimeout(() => ui.announce('PERFECT!', 'perfect'), 900)
+      break
+    }
+    case 'roundEnd': {
+      const leader = m.wins[0] > m.wins[1] ? 0 : 1
+      ui.announce(`${m.fighters[leader].char.name} TAKES THE ROUND`, 'win')
+      ui.pushTicker(`${m.fighters[leader].char.name} takes the round. Sweets distributed outside party office.`, true)
+      break
+    }
+    case 'matchEnd': {
+      const playerWon = ev.side === 0
+      app.pendingResult = {
+        win: playerWon, winnerChar: m.fighters[ev.side].char.id, playerChar: m.fighters[0].char.id,
+        perfect: ev.perfect, timeUp: m.timeUp, wins: ev.wins,
+      }
+      app.resultTimer = 2.1
+      ui.announce(playerWon ? 'YOU WIN!' : 'YOU LOSE', playerWon ? 'win' : 'lose')
+      audio.play(playerWon ? 'jingle_win' : 'jingle_lose')
+      ui.setVignette(true)
+      const winner = m.fighters[ev.side]
+      const wp = worldScreen(winner.x, 2.4, 0)
+      ui.speech(winner.char.winLine, wp.x, wp.y)
+      break
+    }
+  }
+}
+
+function commentaryForHit(ev) {
+  const m = app.match
+  const atk = m.fighters[ev.side]
+  const def = m.fighters[1 - ev.side]
+  const vars = {
+    A: atk.char.name, D: def.char.name, AN: atk.char.fullName, DN: def.char.fullName,
+    M: (ev.move || 'HIT').replace(/!$/, ''), DIR: Math.random() < 0.5 ? 'jumps' : 'crashes',
+    N: String(100 + Math.floor(Math.random() * 900)),
+  }
+  const fill = (s) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
+  const which = ev.side === 0 ? 'godi' : 'troll'
+  const other = ev.side === 0 ? 'troll' : 'godi'
+  app.ui.commentary(which, fill(pick(COMMENTARY[which].hit)))
+  app.ui.commentary(other, fill(pick(COMMENTARY[other].hurt)))
+  if (ev.knockdown) {
+    const t = fill(pick(COMMENTARY.ticker))
+    app.ui.pushTicker(t, true)
+  }
+}
+
+function updateTicker(dt) {
+  app.tickerTimer -= dt
+  if (app.tickerTimer <= 0) {
+    app.tickerTimer = 9 + Math.random() * 6
+    app.ui.pushTicker(pick(COMMENTARY.filler))
+  }
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+
+function worldScreen(x, y, z) {
+  const v = new THREE.Vector3(x, y, z).project(app.camera)
+  return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight }
+}
+
+/* ------------------------------------------------------------------ online */
+
+function openOnline() {
+  app.state = 'online'
+  app.ui.show('online')
+  app.audio.play('select')
+  document.getElementById('on-home').classList.remove('hidden')
+  document.getElementById('on-hosting').classList.add('hidden')
+  document.getElementById('on-connecting').classList.add('hidden')
+  document.getElementById('on-error').classList.add('hidden')
+}
+
+function closeOnline() {
+  app.state = 'select'
+  app.ui.show('select')
+  app.ui.renderSelect(selectState())
+  if (!app.preview.length) refreshPreview()
+}
+
+function startLocal2p() {
+  app.local2p = true
+  app.online.active = true
+  app.online.guest = false
+  app.online.canFight = true
+  app.online.status = 'LOCAL VERSUS · P2: ARROWS + NUMPAD 1/2/3/0'
+  app.state = 'select'
+  app.ui.show('select')
+  app.ui.renderSelect(selectState())
+  refreshPreview()
+  app.audio.play('confirm')
+}
+
+function leaveOnline() {
+  app.local2p = false
+  app.online.active = false
+  app.online.guest = false
+  app.online.canFight = false
+  app.online.status = ''
+  app.ui.renderSelect(selectState())
+  app.audio.play('back')
+}
+
+document.getElementById('on-host')?.addEventListener('click', () => {
+  document.getElementById('on-hosting').classList.remove('hidden')
+  document.getElementById('on-room-code').textContent = 'LOCAL'
+  document.getElementById('on-error').classList.remove('hidden')
+  document.getElementById('on-error-text').textContent = 'Online rooms need a relay server. This build supports CPU and local play.'
+})
+document.getElementById('on-join-form')?.addEventListener('submit', (e) => {
+  e.preventDefault()
+  document.getElementById('on-error').classList.remove('hidden')
+  document.getElementById('on-error-text').textContent = 'No relay server configured in this build. Try CPU mode!'
+})
+
+/* ------------------------------------------------------------------ start */
+window.__SANSAD__ = app
+boot()

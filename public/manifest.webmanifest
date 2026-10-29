@@ -1,0 +1,16 @@
+{
+  "name": "Sansad Showdown",
+  "short_name": "Sansad Showdown",
+  "description": "A Tekken-style 3D fighting game parody of Indian politics.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#120a06",
+  "theme_color": "#120a06",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
