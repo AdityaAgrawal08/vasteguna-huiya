@@ -147,17 +147,18 @@ into `idle`.
 | 3.2 | impact | — | close, shake 0.7 | explosion, screen flash |
 | 3.8 | landing | `charge`→land | wide | Modi drifts back to the floor |
 
-### RAHUL — ALOO SE SONA (5.4 s)
+### RAHUL — ALOO SE SONA (4.6 s)
 
 | t (s) | Beat | Caster anim | Camera | FX |
 | --- | --- | --- | --- | --- |
-| 0.0 | dash + punch | `punchHead` | tight, slow-mo | fists glow, contact flash on the head |
-| 0.9 | transform | — (target `transform:'aloo'`) | push on target | target collapses into a giant potato |
-| 1.6 | carry | `carry` | track | potato pops into his hands |
-| 2.3 | feed | `feed` | close on hopper | potato drops in, machine lights up |
-| 2.9 | gold eruption | `admire` | tilt up | golden beam to the sky, machine shakes |
-| 3.7 | gold rain | `admire` | wide | gold bars rain and settle on the platform |
-| 4.6 | return | — | pull back | poof, the opponent reappears on their feet with less energy |
+| 0.0 | dash + punch | `punchHead` | tight, on the head | fist contact flash, contact shake |
+| 0.6 | transform | — (target `transform:'aloo'`) | push on target | target collapses into a giant potato |
+| 1.2 | carry | `carry` | track | potato pops into his hands |
+| 1.9 | feed | `feed` | close on hopper | potato drops in, machine lights up |
+| 2.6 | gold eruption | `admire` | tilt up, off-axis | golden beam to the sky, machine shakes |
+| 3.1 | gold launch | `admire` | wide pull | gold bars erupt from the chute to the sky |
+| 3.1–4.3 | gold rain | `admire` | wide pull | bars arc over the stage and settle on the ground |
+| 4.3 | return | — | pull back | poof, the opponent reappears on their feet with less energy |
 
 *(The remaining four supers follow the same phase grammar — see `supers.js`.)*
 
