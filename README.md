@@ -65,6 +65,7 @@ Stages: Sansad Bhavan, Jantar Mantar, Desi Sadak. CPU difficulty: Easy / Normal 
 ```bash
 npm run test:engine   # deterministic combat assertions (hit, block, special, sweep, super, KO, grab, scaling, time-up)
 npm run test:ai       # CPU vs CPU matches on all three difficulties
+npm run test:invariants # fight invariant audit (positions, HP, attack frames, no interpenetration)
 npm run test:supers   # all six cinematic super sequences build, animate and dispose
 npm run test:e2e      # Playwright: title → select → fight → hit → pause → result → rematch → super
 npm run test:local2p  # Playwright: friend-room → same-device 2P controls
