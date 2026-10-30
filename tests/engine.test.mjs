@@ -43,7 +43,9 @@ function place(match, x1, x2) {
 {
   const m = new Match({ p1: 'modi', p2: 'rahul' })
   m.start(); skipIntro(m)
-  place(m, -0.5, 0.5)
+  // Start at true jab range: the defender is holding back, which also means
+  // walking backwards, so we begin inside maximum range.
+  place(m, -0.45, 0.45)
   m.step([makeInput({ punch: true }), makeInput({ moveX: 1 })], DT)
   for (let i = 0; i < 16; i++) m.step([empty, makeInput({ moveX: 1 })], DT)
   assert.equal(m.fighters[1].hp, 100, 'blocked attack must not damage')

@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "serve": "node server/serve.mjs",
-    "test": "npm run test:engine && npm run test:ai && npm run test:invariants && npm run test:supers && npm run test:e2e && npm run test:local2p && npm run test:online && npm run test:cinematics && npm run test:chai && npm run test:mobile",
+    "test": "npm run test:engine && npm run test:combat && npm run test:framerate && npm run test:animation && npm run test:ai && npm run test:invariants && npm run test:supers && npm run test:e2e && npm run test:local2p && npm run test:online && npm run test:cinematics && npm run test:chai && npm run test:mobile",
     "test:engine": "node tests/engine.test.mjs",
     "test:ai": "node tests/ai.test.mjs",
     "test:supers": "node tests/supers.test.mjs",
@@ -20,7 +20,10 @@
     "test:chai": "node tests/chai.mjs",
     "test:mobile": "node tests/mobile.mjs",
     "test:invariants": "node tests/invariants.test.mjs",
-    "test:cinematics": "node tests/cinematics.mjs"
+    "test:cinematics": "node tests/cinematics.mjs",
+    "test:combat": "node tests/combat.test.mjs",
+    "test:animation": "node tests/animation.test.mjs",
+    "test:framerate": "node tests/framerate.test.mjs"
   },
   "dependencies": {
     "three": "0.169.0",

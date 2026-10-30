@@ -51,6 +51,8 @@ function sanitizeInput(input) {
   if (!input || typeof input !== 'object') return out
   out.moveX = Math.max(-1, Math.min(1, Number(input.moveX) || 0))
   for (const k of ['up', 'down', 'punch', 'kick', 'grab', 'super']) out[k] = !!input[k]
+  const d = Number(input.dash)
+  out.dash = d === 1 || d === -1 ? d : 0
   return out
 }
 
@@ -244,6 +246,8 @@ export function attachRoomServer(httpServer) {
           for (const k of ['punch', 'kick', 'grab', 'super']) {
             if (input[k]) { press[k] = true; any = true }
           }
+          // dash is an edge, not a held state — queue it for the next tick
+          if (input.dash) { press.dash = input.dash; any = true }
           if (any) {
             room.pressQueue[side].push(press)
             if (room.pressQueue[side].length > 10) room.pressQueue[side].shift()

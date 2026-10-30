@@ -873,26 +873,110 @@ export function createFighterRig(charId) {
     P.head.x += shake * 2
   }
 
-  function applyHitstun(P, t) {
+  // --- reactions -----------------------------------------------------------
+  // `height` is where the blow LANDS: a high hit snaps the head, a mid hit folds
+  // the torso, a low hit buckles the knees. Distinct reaction per hit type.
+  function applyHitstun(P, t, height) {
     const k = Math.exp(-t * 6)
     const shake = Math.sin(t * 50) * 0.05 * k
+    const high = height === 'high'
+    const low = height === 'low'
     P.hipsPos.z = -0.045 * H * k
-    P.hipsPos.y = -0.02 * H * k
+    P.hipsPos.y = (low ? -0.05 : -0.02) * H * k
     P.hipsRot.y = 0.12 * k
-    P.torso.x = 0.03 - 0.28 * k
+    P.torso.x = 0.03 - (high ? 0.2 : low ? 0.12 : 0.32) * k
     P.chest.x = -0.1 * k
-    P.head.x = -0.3 * k + shake
-    P.head.y = 0.1 * k
+    P.head.x = (high ? -0.45 : -0.3) * k + shake
+    P.head.y = (high ? 0.22 : 0.1) * k
     P.armL.x = -0.05 + 0.55 * k
     P.armL.z = -0.12 - 0.45 * k
     P.elbowL.x = -0.6
     P.armR.x = -0.05 + 0.45 * k
     P.armR.z = 0.12 + 0.45 * k
     P.elbowR.x = -0.6
-    P.legL.x = -0.2 * k
+    P.legL.x = low ? -0.45 * k : -0.2 * k
     P.legR.x = 0.25 * k
-    P.kneeL.x = 0.2 + 0.4 * k
+    P.kneeL.x = (low ? 0.7 : 0.2) + 0.4 * k
     P.kneeR.x = 0.2 + 0.4 * k
+  }
+
+  /** Lose balance after a heavy-but-not-knocking blow. */
+  function applyStagger(P, t, height) {
+    const k = Math.exp(-t * 5)
+    const wob = Math.sin(t * 15) * 0.09 * k
+    const high = height === 'high'
+    const low = height === 'low'
+    P.hipsPos.x = -0.06 * H * k
+    P.hipsPos.y = (low ? -0.16 : -0.06) * H * k
+    P.hipsRot.z = 0.17 * k + wob * 0.5
+    P.hipsRot.y = -0.16 * k
+    P.torso.x = (high ? 0.12 : 0.36) * k + wob * 0.3
+    P.torso.y = -0.22 * k
+    P.chest.x = -0.14 * k
+    P.head.x = (high ? -0.44 : -0.2) * k + wob
+    P.head.y = wob * 0.8
+    // arms thrown wide for balance
+    P.armL.x = -0.15 + 0.8 * k
+    P.armL.z = -0.18 - 0.55 * k
+    P.elbowL.x = -0.5 - 0.55 * k
+    P.armR.x = -0.1 + 0.65 * k
+    P.armR.z = 0.16 + 0.5 * k
+    P.elbowR.x = -0.5 - 0.45 * k
+    if (low) {
+      P.kneeL.x = 1.15 * k
+      P.kneeR.x = 1.05 * k
+      P.legL.x = -0.42 * k
+      P.legR.x = 0.36 * k
+    } else {
+      P.kneeL.x = 0.42 * k
+      P.kneeR.x = 0.5 * k
+      P.legL.x = -0.42 * k
+      P.legR.x = 0.3 * k
+    }
+  }
+
+  /** Forward burst: deep lean, arms trailing, long committed stride. */
+  function applyDash(P, t) {
+    const step = Math.sin(t * 26)
+    P.torso.x = 0.36
+    P.chest.x = 0.14
+    P.head.x = -0.12
+    P.hipsPos.y = -0.055 * H
+    P.hipsPos.z = 0.02 * H
+    P.legL.x = -0.95 + step * 0.12
+    P.kneeL.x = 1.25
+    P.legL.z = -0.06
+    P.legR.x = 0.62 - step * 0.12
+    P.kneeR.x = 0.3
+    P.legR.z = 0.06
+    P.armL.x = -1.55
+    P.armL.z = -0.18
+    P.elbowL.x = -0.75
+    P.armR.x = 0.45
+    P.armR.z = 0.28
+    P.elbowR.x = -1.15
+    P.hipsRot.y = 0.1
+  }
+
+  /** Back-step hop: upright, feet tucked, arms open for balance. */
+  function applyBackstep(P, t) {
+    const k = Math.min(1, t * 6)
+    P.torso.x = -0.26 * k
+    P.head.x = -0.14 * k
+    P.hipsPos.y = 0.03 * H + Math.sin(t * 20) * 0.012 * H
+    P.hipsRot.y = -0.12 * k
+    P.legL.x = -0.55 * k
+    P.kneeL.x = 0.95 * k
+    P.legL.z = -0.1
+    P.legR.x = -0.3 * k
+    P.kneeR.x = 0.7 * k
+    P.legR.z = 0.1
+    P.armL.x = -0.75 * k
+    P.armL.z = -1.05 * k
+    P.elbowL.x = -0.55
+    P.armR.x = -0.7 * k
+    P.armR.z = 1.0 * k
+    P.elbowR.x = -0.55
   }
 
   function applyKnockdown(P, t) {
@@ -2191,7 +2275,13 @@ export function createFighterRig(charId) {
     } else if (state === 'victory') {
       applyVictory(target, stateT)
     } else if (state === 'hitstun') {
-      applyHitstun(target, stateT)
+      applyHitstun(target, stateT, pose.hitHeight || 'mid')
+    } else if (state === 'stagger') {
+      applyStagger(target, stateT, pose.hitHeight || 'mid')
+    } else if (state === 'dash') {
+      applyDash(target, stateT)
+    } else if (state === 'backstep') {
+      applyBackstep(target, stateT)
     } else if (state === 'blockstun' || (pose.blocking && (state === 'idle' || state === 'walk' || state === 'crouch'))) {
       applyBlock(target, stateT, crouching)
     } else if (state === 'attack') {
@@ -2217,9 +2307,21 @@ export function createFighterRig(charId) {
 
     let rate = 9
     if (state === 'attack') {
-      rate = phase === 'active' ? 34 : phase === 'startup' ? 26 : 16
+      // Drive the limb to its FULL extension on the contact frame so the strike
+      // visibly connects at the same instant the hitbox is live; the hit-stop
+      // freeze then holds the completed contact pose for the eye to read.
+      const startup = pose.startup || 1
+      const active = pose.active || 3
+      const frame = pose.attackFrame || 0
+      if (frame <= startup) rate = frame >= startup - 1 ? 64 : 30
+      else if (frame <= startup + active) rate = 150
+      else rate = 14 // follow-through settle
     } else if (state === 'hitstun' || state === 'blockstun') {
       rate = 22
+    } else if (state === 'stagger') {
+      rate = 15
+    } else if (state === 'dash' || state === 'backstep') {
+      rate = 42
     } else if (state === 'knockdown' || state === 'ko') {
       rate = 9
     } else if (state === 'getup') {

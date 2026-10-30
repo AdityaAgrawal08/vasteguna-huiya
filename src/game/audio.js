@@ -41,6 +41,17 @@ export function createAudio() {
   let disposed = false;
   let sfxRate = 1;
   let resumePromise = null;
+  // Impact voice limiter (see play()).
+  const IMPACT_SFX = new Set(['punch', 'kick', 'hit', 'heavy', 'block', 'grab', 'land', 'step']);
+  let impactTimes = [];
+  function limiterAllows(now) {
+    while (impactTimes.length && now - impactTimes[0] > 0.25) impactTimes.shift();
+    if (impactTimes.length >= 5) return false;
+    const last = impactTimes[impactTimes.length - 1];
+    if (last !== undefined && now - last < 0.022) return false;
+    impactTimes.push(now);
+    return true;
+  }
 
   function scaleNote(scale, degree, rootMidi) {
     const length = scale.length;
@@ -363,6 +374,12 @@ export function createAudio() {
       sTone(out, time, 125, 0.22, 'sine', 0.5, { to: 42, glide: 0.18 });
       sNoise(out, time, 0.16, { filter: 'lowpass', freq: 700, to: 200, gain: 0.3 });
       sTone(out, time, 70, 0.16, 'triangle', 0.2, { to: 35 });
+    },
+
+    step(time, out) {
+      // Soft shoe scuff — deliberately tiny so it never competes with impacts.
+      sNoise(out, time, 0.05, { filter: 'bandpass', freq: 2400, q: 0.7, gain: 0.07, attack: 0.006 });
+      sTone(out, time, 95, 0.05, 'triangle', 0.06, { to: 60 });
     },
 
     grab(time, out) {
@@ -1290,6 +1307,8 @@ export function createAudio() {
     const pan = clamp(Number.isFinite(panRaw) ? panRaw : 0, -1, 1);
     const rateRaw = Number(opts.rate);
     const rate = clamp(Number.isFinite(rateRaw) ? rateRaw : 1, 0.5, 2);
+
+    if (IMPACT_SFX.has(name) && !limiterAllows(context.currentTime)) return false;
 
     const out = context.createGain();
     out.gain.value = volume * 0.9;

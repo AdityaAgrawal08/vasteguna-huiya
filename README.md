@@ -21,6 +21,7 @@ npm run preview
 | Action | Keyboard |
 | --- | --- |
 | Move / block | A / D (hold back to block) |
+| Dash / dodge | double-tap A or D |
 | Jump / crouch | W / S |
 | Punch | J |
 | Kick | K |
@@ -28,6 +29,9 @@ npm run preview
 | Super (SHAKTI full) | L or Space |
 | Pause | Esc |
 | Music / mute | M / N |
+
+**Dash / dodge:** double-tap ←/→ (A D) — forward burst opens a cancel window
+into an attack, backwards gives a fully invulnerable back-step hop.
 
 Down-state (hold S): **Punch = SKY UPPERCUT** (launches the opponent overhead),
 **Kick = SWEEP** (knocks down).

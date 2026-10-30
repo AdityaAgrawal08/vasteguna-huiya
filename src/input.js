@@ -19,6 +19,10 @@ export class Input {
     this.touchPressed = new Set()
     this.enabled = false
     this.onGlobal = null
+    // Double-tap -> dash / backstep. Per-key so P1 (WASD) and P2 (arrows)
+    // cannot trigger each other's burst.
+    this.tapHistory = new Map() // key -> timestamp
+    this.tapDash = new Map()    // key -> direction (consumed by getInput)
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) {
@@ -28,6 +32,7 @@ export class Input {
       if (KEYMAP[e.code] || e.code === 'Enter') e.preventDefault()
       this.keys.add(e.code)
       this.pressed.add(e.code)
+      this._noteTap(e.code)
       this.onGlobal?.(e)
     })
     window.addEventListener('keyup', (e) => {
@@ -39,6 +44,25 @@ export class Input {
       this.touch.moveX = 0
       this.touch.up = this.touch.down = false
     })
+  }
+
+  /** Two presses of the same movement key inside 260 ms request a dash. */
+  _noteTap(code) {
+    const dir = code === 'KeyA' || code === 'ArrowLeft' ? -1
+      : code === 'KeyD' || code === 'ArrowRight' ? 1 : 0
+    if (!dir) return
+    const now = performance.now()
+    const prev = this.tapHistory.get(code)
+    this.tapHistory.set(code, now)
+    if (prev !== undefined && now - prev <= 260) this.tapDash.set(code, dir)
+    else this.tapDash.delete(code)
+  }
+
+  _consumeTap(codes) {
+    for (const c of codes) {
+      if (this.tapDash.has(c)) { const d = this.tapDash.get(c); this.tapDash.delete(c); return d }
+    }
+    return 0
   }
 
   isDown(action) {
@@ -55,8 +79,20 @@ export class Input {
     return false
   }
 
-  getInput() {
-    const input = emptyInput()
+  /**
+   * Fills `out` with the current frame's input. Pass an object to avoid
+   * allocating one per simulation step (the hot loop never allocates).
+   */
+  getInput(out) {
+    const input = out || emptyInput()
+    input.moveX = 0
+    input.up = false
+    input.down = false
+    input.punch = false
+    input.kick = false
+    input.grab = false
+    input.super = false
+    input.dash = 0
     if (!this.enabled) return input
     if (this.isDown('left')) input.moveX -= 1
     if (this.isDown('right')) input.moveX += 1
@@ -68,6 +104,7 @@ export class Input {
     input.kick = this.consume('kick')
     input.grab = this.consume('grab')
     input.super = this.consume('super')
+    input.dash = this._consumeTap(['KeyA', 'KeyD', 'touch'])
     if (input.grab) { input.punch = false; input.kick = false }
     return input
   }
@@ -78,8 +115,16 @@ export class Input {
   }
 
   /** Second local player: arrows to move, numpad 1/2/3 punch/kick/grab, 0 super. */
-  getP2Input() {
-    const input = emptyInput()
+  getP2Input(out) {
+    const input = out || emptyInput()
+    input.moveX = 0
+    input.up = false
+    input.down = false
+    input.punch = false
+    input.kick = false
+    input.grab = false
+    input.super = false
+    input.dash = 0
     if (!this.enabled) return input
     for (const [code, action] of Object.entries(P2MAP)) {
       if (!this.keys.has(code)) continue
@@ -96,6 +141,7 @@ export class Input {
         }
       }
     }
+    input.dash = this._consumeTap(['ArrowLeft', 'ArrowRight'])
     if (input.grab) { input.punch = false; input.kick = false }
     return input
   }
@@ -123,6 +169,8 @@ export class Input {
       this.touch.up = dy < -22
       this.touch.down = dy > 22
       if (this.touch.up) this.touch.down = false
+      // remember the last deliberate horizontal flick for double-flick dash
+      if (Math.abs(dx) > 24) { this._flickDir = Math.sign(dx); this._flickTime = performance.now() }
     }
     const end = (e) => {
       if (id !== null && e.pointerId !== id) return
@@ -132,6 +180,19 @@ export class Input {
       knob.style.transform = ''
       this.touch.moveX = 0
       this.touch.up = this.touch.down = false
+      // A quick release with a recent flick, repeated twice, bursts sideways.
+      const now = performance.now()
+      if (this._flickDir && now - this._flickTime < 260) {
+        if (this._flickDir === this._lastFlickDir && now - this._lastFlickEnd < 300) {
+          this.tapDash.set('touch', this._flickDir)
+          this._flickDir = 0
+          this._lastFlickDir = 0
+        }
+        this._lastFlickDir = this._flickDir
+        this._lastFlickEnd = now
+      } else {
+        this._flickDir = 0
+      }
     }
     stick.addEventListener('pointerdown', (e) => {
       active = true

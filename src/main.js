@@ -3,7 +3,7 @@ import './style.css'
 import {
   CHARACTERS, ROSTER, STAGES, COMMENTARY, ARENA_HALF_WIDTH,
 } from './game/data.js'
-import { Match, DT, makeInput } from './game/engine.js'
+import { Match, DT, makeInput, emptyInput } from './game/engine.js'
 import { CPU } from './game/ai.js'
 import { createArena } from './game/arena.js'
 import { createFighterRig } from './game/fighters3d.js'
@@ -17,6 +17,11 @@ import { UI } from './ui.js'
 import { portrait } from './portraits.js'
 import { NetClient } from './net.js'
 import { createRemoteMatch, applySnapshot } from './game/remote.js'
+
+// Reused every simulation step / render frame: the fight loop never allocates.
+const SIM_INPUT = emptyInput()
+const SIM_INPUT_P2 = emptyInput()
+const RIG_POSE = {}
 
 const app = {
   state: 'loading',
@@ -36,6 +41,8 @@ const app = {
   chaiCup: null,
   shake: 0,
   shakeTime: 0,
+  simAlpha: 0,
+  zoomPulse: 0,
   time: 0,
   resultTimer: 0,
   pendingResult: null,
@@ -560,14 +567,24 @@ function updateFight(realDt) {
   acc += realDt * scale
   let steps = 0
   while (acc >= DT && steps < 8) {
-    const inp = app.input.getInput()
-    const cpuInp = app.local2p ? app.input.getP2Input() : app.cpu.update()
-    m.step([inp, cpuInp], DT)
-    app.input.endFrame()
+    // While the world is frozen in hit-stop the simulation ignores input, so
+    // we must NOT consume the player's edge — it has to survive the freeze and
+    // come out on the very next live frame.
+    const frozen = m.hitStop > 0
+    if (!frozen) {
+      app.input.getInput(SIM_INPUT)
+      if (app.local2p) app.input.getP2Input(SIM_INPUT_P2)
+      else app.cpu.update(SIM_INPUT_P2)
+    }
+    m.step([SIM_INPUT, SIM_INPUT_P2], DT)
+    if (!frozen) app.input.endFrame()
     acc -= DT
     steps++
   }
   if (steps === 8) acc = 0
+  // Render interpolation: how far into the next simulation tick we are, so the
+  // fighters do not judder when the display rate ≠ 60 Hz.
+  app.simAlpha = Math.min(1, acc / DT)
 
   for (const ev of m.drainEvents()) handleEvent(ev)
 
@@ -590,7 +607,8 @@ function updateFight(realDt) {
 
 function updateNetFight(realDt) {
   const m = app.match
-  const input = app.input.getInput()
+  app.simAlpha = 1
+  const input = app.input.getInput(SIM_INPUT)
   app.net?.sendInput(input)
   app.input.endFrame()
 
@@ -651,30 +669,44 @@ function updateRigs(dt) {
       // Snapshots arrive at 30 Hz; interpolate so remote fighters do not
       // teleport between packets.
       const k = 1 - Math.exp(-24 * dt)
+      void app.simAlpha
       if (Math.abs(f.x - rig.root.position.x) > 2.5) rig.root.position.x = f.x
       else rig.root.position.x += (f.x - rig.root.position.x) * k
       if (f._smoothY == null) f._smoothY = f.y
       f._smoothY += (f.y - f._smoothY) * k
       rig.setFacing(f.facing)
-      const pose = poseFor(f)
+      const pose = poseFor(f, RIG_POSE)
       pose.y = f._smoothY
       rig.update(pose, dt)
     } else {
-      rig.root.position.set(f.x, f.y, 0)
+      // Interpolate between the previous and current simulation tick so a
+      // display rate other than 60 Hz never makes fighters judder.
+      const a = Number.isFinite(app.simAlpha) ? app.simAlpha : 1
+      let px = (Number.isFinite(f.xPrev) ? f.xPrev : f.x) + (f.x - (Number.isFinite(f.xPrev) ? f.xPrev : f.x)) * a
+      let py = (Number.isFinite(f.prevY) ? f.prevY : f.y) + (f.y - (Number.isFinite(f.prevY) ? f.prevY : f.y)) * a
+      if (!Number.isFinite(px)) px = f.x
+      if (!Number.isFinite(py)) py = f.y
+      rig.root.position.set(px, py, 0)
       rig.setFacing(f.facing)
-      rig.update(poseFor(f), dt)
+      const pose = poseFor(f, RIG_POSE)
+      pose.y = py
+      rig.update(pose, dt)
     }
   }
 }
 
-function poseFor(f) {
-  return {
+function poseFor(f, out) {
+  const p = out || {}
+  return Object.assign(p, {
     state: f.state,
     stateTime: f.stateFrames / 60,
     attackId: f.attack?.def.id,
     phase: f.attackPhase,
     attackFrame: f.attack?.frame || 0,
     startup: f.attack?.def.startup || 1,
+    active: f.attack?.def.active || 3,
+    reaction: f.reaction,
+    hitHeight: f.lastHitHeight,
     crouching: f.crouching,
     facing: f.facing,
     x: f.x,
@@ -687,7 +719,7 @@ function poseFor(f) {
     victory: f.state === 'victory',
     flash: f.flash > 0,
     comboHits: f.comboHits,
-  }
+  })
 }
 
 function updateAmbient(dt) {
@@ -754,14 +786,33 @@ function updateCamera(dt) {
   const maxY = Math.max(a.y, b.y)
   const intro = m.phase === 'intro' ? Math.max(0, 1 - m.phaseTime / 1.9) : 0
 
+  // Impact punch-in: a hit narrows the lens for a beat, then eases back out.
+  app.zoomPulse *= Math.exp(-7 * dt)
+  if (app.zoomPulse < 0.02) app.zoomPulse = 0
+
   let px = mid * 0.55
   let py = 2.6 + maxY * 0.18
-  let pz = 9.2 - Math.min(2.0, dist * 0.1)
+  // Zoom IN when they are at boxing range (drama), zoom OUT when they separate
+  // so neither fighter is ever pushed out of frame.
+  let pz = 8.6 + Math.min(2.2, Math.max(0, dist - 2.0) * 0.45)
   if (intro > 0) {
     px += intro * 3.2
     py += intro * 0.5
     pz -= intro * 1.8
   }
+
+  // Dynamic lens: widen as they separate, breathe in on contact.
+  let fov = 40.5 + Math.min(6, Math.max(0, dist - 2.0) * 1.0) - app.zoomPulse
+
+  // Never crop a fighter: guarantee both bodies fit inside the frustum,
+  // including when they are pushed to the arena edges.
+  const halfNeed = dist * 0.5 + 1.6
+  const fit = halfNeed / (Math.tan((fov * Math.PI) / 360) * Math.max(0.6, cam.aspect))
+  if (fit > pz) pz = fit
+
+  // A very slow breath so a static frame never reads as locked off.
+  py += Math.sin(t * 0.5) * 0.045
+  px += Math.sin(t * 0.33) * 0.05
 
   app.cameraPos.set(px, py, pz)
   app.cameraTarget.set(mid * 0.6, 1.22 + maxY * 0.3, 0)
@@ -776,7 +827,6 @@ function updateCamera(dt) {
     cam.position.y += Math.cos(app.time * 77) * s * 0.45
     app.shake *= Math.exp(-9 * dt)
   }
-  const fov = 42 + Math.min(4, dist * 0.15)
   cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt))
   cam.updateProjectionMatrix()
 }
@@ -821,12 +871,32 @@ function handleEvent(ev) {
       break
     case 'hit': {
       const pos = worldScreen(ev.x, ev.y, 0)
-      ui.popup(`-${ev.damage}`, pos.x, pos.y - 30, ev.knockdown ? 'crit' : '')
+      const cls = ev.reaction || 'light'
+      const heavy = ev.heavy || cls === 'launcher' || cls === 'heavy' || ev.knockdown
+      ui.popup(`-${ev.damage}`, pos.x, pos.y - 30, heavy ? 'crit' : '')
       if (ev.move) ui.popup(ev.move, pos.x, pos.y + 16)
-      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), ev.knockdown ? 'red' : 'gold', ev.knockdown ? 22 : 12, ev.knockdown ? 4 : 2.6)
-      app.fx.ring(new THREE.Vector3(ev.x, ev.y, 0), ev.knockdown ? 0xff5a3a : 0xffc040)
-      app.shake = Math.max(app.shake, ev.knockdown ? 0.42 : 0.2)
-      audio.play(ev.knockdown ? 'heavy' : ev.height === 'low' ? 'kick' : 'punch')
+
+      // Motion slash between the two bodies: reads as the limb travelling.
+      const at = m.fighters[ev.side]
+      if (at) {
+        app.fx.streak(
+          new THREE.Vector3(at.x + at.facing * 0.35, ev.y, 0.12),
+          new THREE.Vector3(ev.x, ev.y, 0.12),
+          heavy ? 0xffb45a : 0xfff2c8,
+          heavy ? 0.22 : 0.15,
+        )
+      }
+
+      // Feedback tiers — restrained, each one says how bad the hit was.
+      const tier = heavy ? { count: 30, power: 5.0, ring: 0xff7a3a, shake: 0.55, zoom: 3.4 }
+        : cls === 'medium' ? { count: 18, power: 3.4, ring: 0xffc040, shake: 0.3, zoom: 1.6 }
+          : { count: 10, power: 2.3, ring: 0xffd88a, shake: 0.15, zoom: 0.7 }
+      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), heavy ? 'red' : 'gold', tier.count, tier.power)
+      app.fx.ring(new THREE.Vector3(ev.x, ev.y, 0), tier.ring, heavy ? 1.4 : 1)
+      app.shake = Math.max(app.shake, tier.shake)
+      app.zoomPulse = Math.max(app.zoomPulse, tier.zoom)
+
+      audio.play(cls === 'light' ? (ev.height === 'low' ? 'kick' : 'punch') : cls === 'medium' ? 'hit' : 'heavy')
       if (ev.ko) audio.play('ko')
       if (ev.combo >= 2) ui.combo(ev.side, ev.combo)
       if (ev.knockdown && app.chaiCup && !app.chaiCup.broken) {
@@ -845,8 +915,9 @@ function handleEvent(ev) {
     case 'block': {
       const pos = worldScreen(ev.x, ev.y, 0)
       ui.popup('BLOCKED', pos.x, pos.y - 20)
-      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), 'blue', 8, 2)
-      app.shake = Math.max(app.shake, 0.1)
+      app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), 'blue', 10, 2.4)
+      app.fx.streak(new THREE.Vector3(ev.x, ev.y, 0.1), new THREE.Vector3(ev.x + (m.fighters[ev.side]?.facing || 1) * 0.5, ev.y + 0.15, 0.1), 0x9fd8ff, 0.14)
+      app.shake = Math.max(app.shake, 0.12)
       audio.play('block')
       const which = ev.side === 0 ? 'godi' : 'troll'
       ui.commentary(which, pick(COMMENTARY.block))
@@ -883,6 +954,34 @@ function handleEvent(ev) {
       app.fx.burst(new THREE.Vector3(ev.x, ev.y, 0), 'red', 40, 6)
       app.fx.ring(new THREE.Vector3(ev.x, ev.y, 0), 0xff6a00)
       ui.setVignette(false)
+      break
+    }
+    case 'swing':
+      audio.play('whoosh', { volume: (ev.damage || 5) >= 11 ? 0.95 : 0.55 })
+      break
+    case 'land': {
+      audio.play('land')
+      // A little kicked-up dust so a landing reads as weight hitting the floor.
+      const lf = m.fighters[ev.side]
+      if (lf) app.fx.burst(new THREE.Vector3(lf.x, 0.12, 0), 'white', 7, 1.5)
+      break
+    }
+    case 'step':
+      audio.play('step')
+      break
+    case 'dash':
+      audio.play('whoosh', { volume: 0.75 })
+      break
+    case 'dodge': {
+      audio.play('whoosh', { volume: 1 })
+      const f = m.fighters[ev.side]
+      if (f) {
+        app.fx.streak(
+          new THREE.Vector3(f.x, 0.9, 0.1),
+          new THREE.Vector3(f.x - (f.facing || 1) * 0.9, 0.7, 0.1),
+          0x9fd8ff, 0.26,
+        )
+      }
       break
     }
     case 'suddenDeath':
