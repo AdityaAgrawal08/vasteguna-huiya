@@ -96,6 +96,8 @@ try {
     m.fighters[1].state = 'ko'
     m.endRound(0, false)
   })
+  await page.waitForFunction(() => document.querySelector('#announce').textContent === 'GARBA TIME!', { timeout: 12000 }).catch(() => {})
+  await page.screenshot({ path: `${shots}/07-dance.png` })
   await page.waitForSelector('#result:not(.hidden)', { timeout: 30000 })
   await sleep(800)
   await page.screenshot({ path: `${shots}/06-result.png` })

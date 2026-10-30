@@ -71,6 +71,7 @@ npm run test:e2e      # Playwright: title → select → fight → hit → pause
 npm run test:local2p  # Playwright: friend-room → same-device 2P controls
 npm run test:online   # Playwright: two browsers, room code, picks, net fight
 npm run test:cow      # Playwright: the stray-cow stage interruption
+npm run test:chai     # Playwright: the ringside chai-cup knockdown event
 npm run test:stages   # Playwright: all three stages render and start a fight
 ```
 

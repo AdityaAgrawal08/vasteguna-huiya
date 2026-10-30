@@ -11,6 +11,8 @@ import { createAudio } from './game/audio.js'
 import { createFX } from './game/fx.js'
 import { createSuperSequence } from './game/supers.js'
 import { createCow } from './game/cow.js'
+import { createChaiCup } from './game/chai.js'
+import { createVoice } from './game/voice.js'
 import { Input, isTouchDevice } from './input.js'
 import { UI } from './ui.js'
 import { portrait } from './portraits.js'
@@ -35,6 +37,7 @@ const app = {
   cow: null,
   cowActive: false,
   cowUsed: false,
+  chaiCup: null,
   shake: 0,
   shakeTime: 0,
   time: 0,
@@ -89,12 +92,23 @@ function boot() {
 
   app.fx = createFX(scene)
   app.audio = createAudio()
+  app.voice = createVoice()
   app.ui = new UI()
   app.input = new Input()
   app.input.bindTouch(document.getElementById('touch'))
 
   if (isTouchDevice()) {
     document.documentElement.classList.add('touch')
+    const ua = navigator.userAgent
+    const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+    const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches
+    if (ios && !standalone) {
+      const hint = document.getElementById('ios-swipe')
+      if (hint) {
+        hint.classList.remove('hidden')
+        hint.querySelector('.swipe-skip')?.addEventListener('click', () => hint.classList.add('hidden'))
+      }
+    }
   }
 
   app.ui.onTile = (id) => pickTile(id)
@@ -351,6 +365,7 @@ function startFight() {
   app.rigs[1].setFacing(-1)
 
   app.arena.setStage(stage)
+  app.chaiCup = createChaiCup(app.scene)
   app.ui.setHudChars(p1, p2)
   app.ui.setAnchors([p1, p2])
   app.ui.hud.classList.remove('hidden')
@@ -397,6 +412,7 @@ function startNetFight(msg) {
   app.rigs[1].setFacing(-1)
 
   app.arena.setStage(msg.stage)
+  app.chaiCup = createChaiCup(app.scene)
   app.ui.setHudChars(msg.p1, msg.p2)
   app.ui.setAnchors([msg.p1, msg.p2])
   app.ui.hud.classList.remove('hidden')
@@ -435,6 +451,7 @@ function cleanupFight() {
   app.rigs = [null, null]
   if (app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
   if (app.cow) { app.cow.dispose(); app.cow = null }
+  if (app.chaiCup) { app.chaiCup.dispose(); app.chaiCup = null }
   app.cowActive = false
   app.netMode = false
   app.netSnaps = []
@@ -487,6 +504,7 @@ function rematch() {
 function toggleMute() {
   app.muted = !app.muted
   app.audio.setMuted(app.muted)
+  app.voice?.setMuted(app.muted)
   app.ui.setSoundIcon(app.muted)
   app.ui.setPauseSound(!app.muted)
 }
@@ -788,6 +806,7 @@ function handleEvent(ev) {
       ui.setVignette(false)
       audio.play('bell')
       audio.play('round')
+      app.voice?.announce(`Round ${ev.round}`)
       const godi = m.fighters[0].char.id === 'modi' || m.fighters[1].char.id === 'rahul' ? 0 : 1
       ui.commentary('godi', final ? COMMENTARY.finalRound.godi : COMMENTARY.roundStart.godi.replace('{R}', ev.round).replace('{G}', m.fighters[godi].char.fullName))
       ui.commentary('troll', final ? COMMENTARY.finalRound.troll : COMMENTARY.roundStart.troll.replace('{R}', ev.round))
@@ -797,15 +816,18 @@ function handleEvent(ev) {
     case 'fight':
       ui.announce('FIGHT!', 'fight')
       audio.play('fight')
+      app.voice?.announce('Fight!')
       setTimeout(() => {
         if (app.state !== 'fight') return
         const [a, b] = m.fighters
         const pa = worldScreen(a.x, 2.25, 0)
         const pb = worldScreen(b.x, 2.25, 0)
         ui.speech(a.char.introLine, pa.x, pa.y)
+        app.voice?.speak(a.char.introLine, a.char.id)
         setTimeout(() => {
           if (app.state !== 'fight') return
           ui.speech(b.char.introLine, pb.x, pb.y)
+          app.voice?.speak(b.char.introLine, b.char.id)
         }, 500)
       }, 350)
       break
@@ -819,6 +841,16 @@ function handleEvent(ev) {
       audio.play(ev.knockdown ? 'heavy' : ev.height === 'low' ? 'kick' : 'punch')
       if (ev.ko) audio.play('ko')
       if (ev.combo >= 2) ui.combo(ev.side, ev.combo)
+      if (ev.knockdown && app.chaiCup && !app.chaiCup.broken) {
+        const def = m.fighters[1 - ev.side]
+        if (Math.abs(def.x - app.chaiCup.x) < 2.4) {
+          app.chaiCup.shatter()
+          const cpos = worldScreen(app.chaiCup.x, 0.45, app.chaiCup.z)
+          ui.popup('CHAI CUP MARTYRED!', cpos.x, cpos.y, 'crit')
+          audio.play('cupBreak')
+          ui.pushTicker('BREAKING: Chai cup martyred at ringside. The chaiwala demands compensation.', true)
+        }
+      }
       commentaryForHit(ev)
       break
     }
@@ -870,6 +902,7 @@ function handleEvent(ev) {
     case 'ko': {
       ui.announce(ev.timeUp ? 'TIME UP' : 'K.O.', ev.timeUp ? '' : 'ko')
       audio.play(ev.timeUp ? 'timeup' : 'ko')
+      app.voice?.announce(ev.timeUp ? 'Time up!' : 'K.O.!')
       app.shake = 0.6
       ui.setVignette(true)
       if (ev.perfect) setTimeout(() => ui.announce('PERFECT!', 'perfect'), 900)
@@ -892,10 +925,19 @@ function handleEvent(ev) {
       app.resultTimer = 2.1
       ui.announce(playerWon ? 'YOU WIN!' : 'YOU LOSE', playerWon ? 'win' : 'lose')
       audio.play(playerWon ? 'jingle_win' : 'jingle_lose')
+      app.voice?.announce(playerWon ? 'You win!' : 'You lose!')
       ui.setVignette(true)
       const winner = m.fighters[ev.side]
+      app.voice?.speak(winner.char.winLine, winner.char.id)
       const wp = worldScreen(winner.x, 2.4, 0)
       ui.speech(winner.char.winLine, wp.x, wp.y)
+      setTimeout(() => {
+        if (app.state !== 'fight' && app.state !== 'result') return
+        ui.announce(winner.char.dance.label, 'win')
+        app.fx.burst(new THREE.Vector3(winner.x, 2.2, 0), 'gold', 26, 4)
+        app.fx.burst(new THREE.Vector3(winner.x - 0.4, 1.6, 0), 'red', 18, 3)
+        app.fx.burst(new THREE.Vector3(winner.x + 0.4, 1.8, 0), 'blue', 18, 3)
+      }, 1050)
       break
     }
   }

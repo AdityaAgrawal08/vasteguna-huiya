@@ -948,25 +948,105 @@ export function createFighterRig(charId) {
 
   function applyVictory(P, t) {
     const pump = Math.sin(t * 3.5)
+    const sway = Math.sin(t * 1.8)
     P.hipsPos.y = Math.abs(Math.sin(t * 3.5)) * 0.025 * H
-    P.hipsPos.x = Math.sin(t * 1.8) * 0.02 * H
-    P.hipsRot.y = Math.sin(t * 1.8) * 0.15
-    P.hipsRot.z = Math.sin(t * 1.8) * 0.05
+    P.hipsPos.x = sway * 0.02 * H
+    P.hipsRot.y = sway * 0.15
+    P.hipsRot.z = sway * 0.05
     P.torso.x = -0.08 + pump * 0.03
-    P.torso.y = -Math.sin(t * 1.8) * 0.08
+    P.torso.y = -sway * 0.08
     P.chest.x = -0.02
     P.head.x = -0.18 + Math.sin(t * 3.5 + 0.5) * 0.04
-    P.head.y = Math.sin(t * 1.8) * 0.15
-    P.armL.x = -2.65 + pump * 0.25
-    P.armR.x = -2.65 - pump * 0.25
-    P.armL.z = -0.45
-    P.armR.z = 0.45
-    P.elbowL.x = -0.55
-    P.elbowR.x = -0.55
+    P.head.y = sway * 0.15
     P.legL.x = 0.08 + Math.sin(t * 3.5) * 0.08
     P.legR.x = -0.08 - Math.sin(t * 3.5) * 0.08
     P.kneeL.x = 0.15
     P.kneeR.x = 0.15
+
+    switch (charId) {
+      case 'modi': {
+        // Garba: arms up, clapping side to side.
+        const clap = Math.sin(t * 6)
+        P.armL.x = -2.25 + clap * 0.18
+        P.armR.x = -2.25 - clap * 0.18
+        P.armL.z = -0.75 + clap * 0.45
+        P.armR.z = 0.75 - clap * 0.45
+        P.elbowL.x = -1.15
+        P.elbowR.x = -1.15
+        P.hipsRot.y = sway * 0.3
+        P.head.y = sway * 0.28
+        break
+      }
+      case 'rahul': {
+        // Balle balle: wide open arms, hip sway and little kicks.
+        P.armL.x = -2.7 + Math.sin(t * 4) * 0.2
+        P.armR.x = -2.7 - Math.sin(t * 4) * 0.2
+        P.armL.z = -1.15
+        P.armR.z = 1.15
+        P.elbowL.x = -0.35
+        P.elbowR.x = -0.35
+        P.hipsRot.y = Math.sin(t * 3) * 0.35
+        P.legR.x = -0.5 + Math.sin(t * 6) * 0.3
+        P.kneeR.x = 0.4
+        break
+      }
+      case 'didi': {
+        // Khela hobe: alternating fist pumps.
+        const alt = Math.sin(t * 5)
+        P.armL.x = -2.5 + alt * 0.35
+        P.armR.x = -2.5 - alt * 0.35
+        P.armL.z = -0.35
+        P.armR.z = 0.35
+        P.elbowL.x = -1.5
+        P.elbowR.x = -1.5
+        P.hipsPos.y = Math.abs(Math.sin(t * 5)) * 0.045 * H
+        P.head.y = alt * 0.12
+        break
+      }
+      case 'trump': {
+        // Tremendous strut: arms out, chin up, shoulders rolling.
+        P.armL.x = -0.9 + pump * 0.1
+        P.armR.x = -0.9 - pump * 0.1
+        P.armL.z = -0.9
+        P.armR.z = 0.9
+        P.elbowL.x = -1.1
+        P.elbowR.x = -1.1
+        P.hipsRot.y = sway * 0.25
+        P.hipsPos.x = sway * 0.04 * H
+        P.head.x = -0.3
+        P.head.y = sway * 0.2
+        break
+      }
+      case 'yogi': {
+        // Baba ka swag: arms folded, slow sway.
+        P.armL.x = -1.15
+        P.armR.x = -1.15
+        P.armL.z = 0.75
+        P.armR.z = -0.75
+        P.elbowL.x = -2.1
+        P.elbowR.x = -2.1
+        P.hipsRot.y = sway * 0.22
+        P.head.x = -0.12
+        P.head.y = sway * 0.12
+        break
+      }
+      case 'nitin': {
+        // Zingaat: bouncing with alternating high arms.
+        const alt = Math.sin(t * 7)
+        P.armL.x = -2.2 + alt * 0.7
+        P.armR.x = -2.2 - alt * 0.7
+        P.armL.z = -0.5
+        P.armR.z = 0.5
+        P.elbowL.x = -0.8
+        P.elbowR.x = -0.8
+        P.hipsPos.y = Math.abs(Math.sin(t * 7)) * 0.05 * H
+        P.legL.x = Math.sin(t * 7) * 0.35
+        P.legR.x = -Math.sin(t * 7) * 0.35
+        P.kneeL.x = 0.25
+        P.kneeR.x = 0.25
+        break
+      }
+    }
   }
 
   function applyIntro(P, t) {
