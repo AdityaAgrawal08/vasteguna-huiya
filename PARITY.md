@@ -53,14 +53,10 @@ The **GAP** rows require copying files published by the original site:
 Those files are copyrighted assets. Re-downloading and shipping them would be
 redistribution, not a clean-room clone. Everything else in the table is implemented.
 
-## Decision
+## Decision (recorded)
 
-Choose one:
+**Accepted: faithful procedural clone.** On 2026-10-30 the user chose option 2 — keep
+the tested build with original procedural art/audio rather than downloading or
+redistributing the original proprietary GLB/PNG/MP3 files. The **GAP** rows above are
+therefore intentional; all functional parity items are implemented and tested.
 
-1. **Authorize / provide the original assets** — if you own or have licensed them,
-   place the GLB/PNG/MP3 files under `public/` and I will wire the exact models,
-   portraits, voice clips and music into the existing rig/audio interfaces. This is
-   the only route to byte-for-byte visual/audio parity.
-2. **Accept the faithful procedural clone** — current build: same roster, moves,
-   specials, supers, stages, screens, controls, AI and online rooms, with original
-   procedural art/audio instead of copied assets.
