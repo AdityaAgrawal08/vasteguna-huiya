@@ -53,7 +53,6 @@ Stages: Sansad Bhavan, Jantar Mantar, Desi Sadak. CPU difficulty: Easy / Normal 
 - `src/game/fighters3d.js` — procedural character rigs and animation
 - `src/game/arena.js` — procedural stage geometry, lighting, camera
 - `src/game/supers.js` — six cinematic super-move sequences
-- `src/game/cow.js` — the stray-cow stage interruption
 - `src/game/audio.js` — WebAudio SFX and procedural music
 - `src/ui.js`, `src/style.css`, `index.html` — screens, HUD, newsdesk, newspaper
 - `src/input.js` — keyboard + touch input
@@ -70,8 +69,8 @@ npm run test:supers   # all six cinematic super sequences build, animate and dis
 npm run test:e2e      # Playwright: title → select → fight → hit → pause → result → rematch → super
 npm run test:local2p  # Playwright: friend-room → same-device 2P controls
 npm run test:online   # Playwright: two browsers, room code, picks, net fight
-npm run test:cow      # Playwright: the stray-cow stage interruption
 npm run test:chai     # Playwright: the ringside chai-cup knockdown event
+npm run test:mobile   # Playwright: iPhone viewport, touch stick and action buttons
 npm run test:stages   # Playwright: all three stages render and start a fight
 ```
 

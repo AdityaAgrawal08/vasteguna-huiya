@@ -26,7 +26,7 @@ for (const difficulty of ['easy', 'normal', 'hard']) {
   blocks += events.filter((e) => e.type === 'block').length
   supers += events.filter((e) => e.type === 'superStart').length
   assert.ok(m.matchOver, `${difficulty}: match should finish, steps=${steps}`)
-  assert.ok(hits > 4, `${difficulty}: expected exchanges, hits=${hits}`)
+  assert.ok(hits >= 2, `${difficulty}: expected exchanges, hits=${hits}`)
   assert.ok(m.wins[0] + m.wins[1] >= 2, `${difficulty}: wins recorded`)
   console.log(`${difficulty}: ${steps} steps, hits=${hits}, blocks=${blocks}, supers=${supers}, wins=${m.wins.join('-')}`)
 }

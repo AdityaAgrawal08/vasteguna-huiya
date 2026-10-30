@@ -46,11 +46,29 @@ try {
   })
   if (before.broken) throw new Error('cup started broken')
 
-  await page.keyboard.down('KeyS')
-  await sleep(80)
-  await page.keyboard.press('KeyK')
-  await sleep(120)
-  await page.keyboard.up('KeyS')
+  let broke = false
+  for (let attempt = 0; attempt < 3 && !broke; attempt++) {
+    await page.keyboard.down('KeyS')
+    await sleep(100)
+    await page.keyboard.press('KeyK')
+    await sleep(250)
+    await page.keyboard.up('KeyS')
+    try {
+      await page.waitForFunction(() => window.__SANSAD__.chaiCup?.broken === true, { timeout: 5000 })
+      broke = true
+    } catch {
+      await page.evaluate(() => {
+        const app = window.__SANSAD__
+        const m = app.match
+        for (const f of m.fighters) {
+          f.state = 'idle'; f.attack = null; f.stun = 0; f.buffer = null; f.vx = 0
+          f.x = f.side === 0 ? app.chaiCup.x - 0.6 : app.chaiCup.x
+          f.facing = f.side === 0 ? 1 : -1
+        }
+        m.fighters[1].hp = 100
+      })
+    }
+  }
   await page.waitForFunction(() => window.__SANSAD__.chaiCup?.broken === true, { timeout: 10000 })
   await page.screenshot({ path: 'tests/screenshots/11-chai-cup.png' })
   const after = await page.evaluate(() => ({

@@ -69,7 +69,7 @@ export class CPU {
 
     // Basic spacing/approach when idle.
     if (!this.plan.length && !input.punch && !input.kick && !input.grab) {
-      if (dist > 2.6) {
+      if (dist > 1.7) {
         input.moveX = toward
       } else if (dist < 1.2 && this.rng() < 0.02) {
         input.moveX = -toward
@@ -83,35 +83,15 @@ export class CPU {
 
   decide(dist, toward, foe) {
     const r = this.rng()
-    const me = this.me
-    const reach = 1.5
+    const cfg = this.cfg
 
-    if (dist > 3.2) {
-      if (r < 0.08 * this.cfg.jump * 10) {
+    // Far away: close the gap, occasionally jump in.
+    if (dist > 3.0) {
+      if (r < 0.16 * cfg.jump) {
         this.plan = [
           { at: 0, input: { moveX: toward } },
           { at: 6, input: { up: true, moveX: toward } },
-          { at: 12, input: { kick: true, moveX: toward } },
-        ]
-      } else if (r < this.cfg.aggression * 0.25) {
-        this.plan = [
-          { at: 0, input: { moveX: toward } },
-          { at: 4, input: { moveX: toward, kick: true } },
-        ]
-      }
-      return
-    }
-
-    if (dist > reach) {
-      if (r < 0.3 * this.cfg.aggression) {
-        this.plan = [
-          { at: 0, input: { moveX: toward } },
-          { at: 5, input: { moveX: toward, punch: true } },
-        ]
-      } else if (r < 0.55 * this.cfg.aggression) {
-        this.plan = [
-          { at: 0, input: { moveX: toward } },
-          { at: 5, input: { moveX: toward, kick: true } },
+          { at: 14, input: { kick: true, moveX: toward } },
         ]
       } else {
         this.plan = [{ at: 0, input: { moveX: toward } }]
@@ -119,31 +99,50 @@ export class CPU {
       return
     }
 
-    // In range.
-    if (r < this.cfg.block * 0.18) { this.blockUntil = 16; return }
-
-    if (r < this.cfg.special) {
-      const special = this.rng() < 0.5
-      this.plan = special
-        ? [{ at: 0, input: { moveX: toward, punch: true } }]
-        : [{ at: 0, input: { moveX: toward, kick: true } }]
+    // Mid range: walk in; only poke when the long kick can actually reach.
+    if (dist > 1.55) {
+      if (r < cfg.block * 0.16) { this.blockUntil = 14; return }
+      if (dist < 1.85 && r < 0.4 * cfg.aggression) {
+        this.plan = [
+          { at: 0, input: { moveX: toward } },
+          { at: 4, input: { moveX: toward, kick: true } },
+        ]
+      } else {
+        this.plan = [{ at: 0, input: { moveX: toward } }]
+      }
       return
     }
 
-    if (r < this.cfg.special + 0.12) {
-      this.plan = [
-        { at: 0, input: { down: true } },
-        { at: 3, input: { down: true, kick: true } },
-      ]
+    // Close range: only use attacks that can actually reach.
+    if (r < cfg.block * 0.14) { this.blockUntil = 14; return }
+
+    if (dist > 1.15) {
+      if (r < cfg.special * 0.8) {
+        // special2: forward + kick (reach 1.55)
+        this.plan = [{ at: 0, input: { moveX: toward, kick: true } }]
+      } else if (r < cfg.special * 1.05) {
+        // sweep (reach 1.4, low)
+        this.plan = [
+          { at: 0, input: { down: true } },
+          { at: 3, input: { down: true, kick: true } },
+        ]
+      } else if (r < cfg.special * 1.25) {
+        this.plan = [{ at: 0, input: { grab: true } }]
+      } else if (r < 0.82) {
+        this.plan = [
+          { at: 0, input: { kick: true } },
+          { at: 14, input: { kick: true } },
+        ]
+      } else {
+        this.plan = [{ at: 0, input: { moveX: toward } }]
+      }
       return
     }
 
-    if (r < this.cfg.special + 0.2) {
-      this.plan = [{ at: 0, input: { grab: true } }]
-      return
-    }
-
-    if (r < 0.75) {
+    // Point blank.
+    if (r < cfg.special * 0.55) {
+      this.plan = [{ at: 0, input: { moveX: toward, punch: true } }]
+    } else if (r < cfg.special * 0.8) {
       const combo = Math.floor(this.rng() * 3)
       if (combo === 0) {
         this.plan = [
@@ -163,9 +162,20 @@ export class CPU {
           { at: 14, input: { kick: true } },
         ]
       }
-      return
+    } else if (r < cfg.special * 1.0) {
+      this.plan = [
+        { at: 0, input: { down: true } },
+        { at: 3, input: { down: true, kick: true } },
+      ]
+    } else if (r < cfg.special * 1.18) {
+      this.plan = [{ at: 0, input: { grab: true } }]
+    } else if (r < 0.9) {
+      this.plan = [
+        { at: 0, input: { punch: true } },
+        { at: 10, input: { punch: true } },
+      ]
+    } else {
+      this.plan = [{ at: 0, input: { moveX: -toward } }]
     }
-
-    if (r < 0.88) this.plan = [{ at: 0, input: { moveX: -toward } }]
   }
 }

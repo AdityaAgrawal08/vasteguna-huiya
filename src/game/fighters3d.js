@@ -1057,16 +1057,83 @@ export function createFighterRig(charId) {
     P.torso.y = 0.1
     P.head.x = -0.05
     P.head.y = 0.15 * Math.sin(t * 2)
-    P.armR.x = -2.2
-    P.armR.z = 0.5
-    P.elbowR.x = -1.0 + wave * 0.2
-    P.armL.x = -0.4
-    P.armL.z = -0.6
-    P.elbowL.x = -1.8
     P.legL.x = 0.05
     P.legR.x = -0.05
     P.kneeL.x = 0.1
     P.kneeR.x = 0.1
+
+    switch (charId) {
+      case 'modi': {
+        // Namaste, with a small bow.
+        P.armL.x = -1.15
+        P.armL.z = 0.38
+        P.elbowL.x = -1.75
+        P.armR.x = -1.15
+        P.armR.z = -0.38
+        P.elbowR.x = -1.75
+        P.torso.x = -0.16
+        P.head.x = 0.16
+        P.hipsPos.y = -0.012 * H
+        break
+      }
+      case 'rahul': {
+        // Friendly wave.
+        P.armR.x = -2.55
+        P.armR.z = 0.55
+        P.elbowR.x = -0.9 + wave * 0.3
+        P.armL.x = -0.35
+        P.armL.z = -0.5
+        P.elbowL.x = -1.4
+        break
+      }
+      case 'didi': {
+        // Arms folded, chin up.
+        P.armL.x = -1.0
+        P.armL.z = 0.9
+        P.elbowL.x = -2.2
+        P.armR.x = -1.0
+        P.armR.z = -0.9
+        P.elbowR.x = -2.2
+        P.hipsRot.y = 0.1 * Math.sin(t * 1.5)
+        P.head.z = 0.05
+        break
+      }
+      case 'trump': {
+        // Thumbs-up showman pose.
+        P.armR.x = -1.5
+        P.armR.z = 0.4
+        P.elbowR.x = -1.85
+        P.armL.x = -0.4
+        P.armL.z = -0.9
+        P.elbowL.x = -2.0
+        P.hipsRot.y = 0.08 * Math.sin(t * 1.2)
+        P.head.x = -0.12
+        break
+      }
+      case 'yogi': {
+        // Respectful namaste.
+        P.armL.x = -1.1
+        P.armL.z = 0.42
+        P.elbowL.x = -1.85
+        P.armR.x = -1.1
+        P.armR.z = -0.42
+        P.elbowR.x = -1.85
+        P.torso.x = -0.1
+        P.head.x = 0.1
+        break
+      }
+      case 'nitin': {
+        // Highway salute.
+        P.armR.x = -2.35
+        P.armR.z = 0.22
+        P.elbowR.x = -1.95
+        P.armL.x = -0.3
+        P.armL.z = -0.4
+        P.elbowL.x = -1.2
+        P.head.x = -0.08
+        break
+      }
+    }
   }
 
   function applySuper(P, t) {

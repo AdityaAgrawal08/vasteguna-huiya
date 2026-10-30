@@ -143,4 +143,22 @@ function place(match, x1, x2) {
   assert.equal(m.fighters[0].state, 'victory')
 }
 
-console.log('engine tests passed: intro, hit, block, special, sweep, super, KO, grab, scaling, time-up')
+// 11. simultaneous KOs are a double KO and replay the round
+{
+  const m = new Match({ p1: 'modi', p2: 'rahul' })
+  m.start(); skipIntro(m)
+  place(m, -0.5, 0.5)
+  m.fighters[0].hp = 1
+  m.fighters[1].hp = 1
+  m.step([makeInput({ punch: true }), makeInput({ punch: true })], DT)
+  for (let i = 0; i < 20; i++) m.step([empty, empty], DT)
+  assert.equal(m.phase, 'ko')
+  assert.equal(m.wins[0], 0)
+  assert.equal(m.wins[1], 0)
+  const evs = m.drainEvents()
+  assert.ok(evs.some((e) => e.type === 'ko' && e.doubleKo), 'double KO event')
+  for (let i = 0; i < 400; i++) m.step([empty, empty], DT)
+  assert.equal(m.round, 2, 'double KO should replay into round 2')
+}
+
+console.log('engine tests passed: intro, hit, block, special, sweep, super, KO, double-KO, grab, scaling, time-up')

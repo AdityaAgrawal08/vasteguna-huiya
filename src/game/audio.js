@@ -304,15 +304,7 @@ export function createAudio() {
     sTone(out, time, frequency * 2.01, duration * 0.65, 'sine', peak * 0.28, { attack: 0.004 });
   }
 
-  function mooSound(time, out, pitch) {
-    const p = pitch || 1;
-    sTone(out, time, 140 * p, 0.85, 'sawtooth', 0.16, {
-      to: 95 * p, glide: 0.7, filter: 'lowpass', cutoff: 620, cutoffTo: 300, attack: 0.08,
-    });
-    sTone(out, time + 0.02, 70 * p, 0.85, 'triangle', 0.12, { to: 55 * p, attack: 0.08 });
-    sTone(out, time, 280 * p, 0.6, 'sine', 0.04, { to: 210 * p, attack: 0.1 });
-    sNoise(out, time + 0.1, 0.5, { filter: 'bandpass', freq: 500 * p, q: 2, gain: 0.04, attack: 0.15 });
-  }
+
 
   const SFX = {
     punch(time, out) {
@@ -597,14 +589,6 @@ export function createAudio() {
         sTone(out, time + 0.02 + index * 0.02, freq, 0.16, 'triangle', 0.06, { to: freq * 0.9 });
       });
       sTone(out, time, 180, 0.12, 'sine', 0.2, { to: 60 });
-    },
-
-    cow(time, out) {
-      mooSound(time, out, 1);
-    },
-
-    moo(time, out) {
-      mooSound(time, out, 0.85);
     },
 
     camera(time, out) {

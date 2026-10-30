@@ -10,7 +10,6 @@ import { createFighterRig } from './game/fighters3d.js'
 import { createAudio } from './game/audio.js'
 import { createFX } from './game/fx.js'
 import { createSuperSequence } from './game/supers.js'
-import { createCow } from './game/cow.js'
 import { createChaiCup } from './game/chai.js'
 import { createVoice } from './game/voice.js'
 import { Input, isTouchDevice } from './input.js'
@@ -34,9 +33,6 @@ const app = {
   rigs: [null, null],
   superSeq: null,
   preview: [],
-  cow: null,
-  cowActive: false,
-  cowUsed: false,
   chaiCup: null,
   shake: 0,
   shakeTime: 0,
@@ -83,7 +79,7 @@ function boot() {
   app.camera = arena.camera
 
   const params = new URLSearchParams(location.search)
-  app.lowQuality = params.get('quality') === 'low'
+  app.lowQuality = params.get('quality') === 'low' || isTouchDevice()
   if (app.lowQuality) {
     renderer.setPixelRatio(1)
     renderer.shadowMap.enabled = false
@@ -384,9 +380,6 @@ function startFight() {
   app.state = 'fight'
   app.shake = 0
   app.superSeq = null
-  app.cow = null
-  app.cowActive = false
-  app.cowUsed = false
   app.resultTimer = 0
   app.pendingResult = null
   app.match.start()
@@ -434,9 +427,6 @@ function startNetFight(msg) {
   app.state = 'fight'
   app.shake = 0
   app.superSeq = null
-  app.cow = null
-  app.cowActive = false
-  app.cowUsed = true
   app.resultTimer = 0
   app.pendingResult = null
   app.audio.startMusic(msg.stage)
@@ -450,9 +440,7 @@ function cleanupFight() {
   }
   app.rigs = [null, null]
   if (app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
-  if (app.cow) { app.cow.dispose(); app.cow = null }
   if (app.chaiCup) { app.chaiCup.dispose(); app.chaiCup = null }
-  app.cowActive = false
   app.netMode = false
   app.netSnaps = []
   app.ui.hud.classList.add('hidden')
@@ -518,12 +506,30 @@ function toggleMusic() {
 
 let last = performance.now()
 let acc = 0
+let fpsWindow = 0
+let fpsFrames = 0
 
 function frame(now) {
   requestAnimationFrame(frame)
   const realDt = Math.min(0.1, (now - last) / 1000)
   last = now
   app.time += realDt
+
+  // Adaptive quality: if a device cannot hold a smooth frame rate, drop
+  // shadows/particles once instead of letting the fight stutter.
+  fpsWindow += realDt
+  fpsFrames++
+  if (fpsWindow >= 2.5) {
+    const fps = fpsFrames / fpsWindow
+    if (fps < 42 && !app.lowQuality) {
+      app.lowQuality = true
+      app.renderer.setPixelRatio(1)
+      app.renderer.shadowMap.enabled = false
+      app.arena.setQuality('low')
+    }
+    fpsWindow = 0
+    fpsFrames = 0
+  }
 
   if (app.state === 'fight') {
     updateFight(realDt)
@@ -550,26 +556,6 @@ function updateFight(realDt) {
   if (!m) return
   if (app.netMode) { updateNetFight(realDt); return }
 
-  if (app.cowActive && app.cow) {
-    const done = app.cow.update(realDt)
-    if (done) {
-      app.cow.dispose()
-      app.cow = null
-      app.cowActive = false
-      app.ui.announce('RESUME!', 'fight')
-      app.ui.commentary('godi', 'The cow has blessed the fight. Resume!')
-      app.ui.commentary('troll', 'Cow left. Back to business, chat!')
-      app.ui.pushTicker('BREAKING: Stray cow exits stage left. Fight resumes.', true)
-      app.audio.play('bell')
-    }
-    updateRigs(realDt)
-    updateCamera(realDt)
-    app.ui.updateHud(m)
-    updateTicker(realDt)
-    app.input.endFrame()
-    return
-  }
-
   const scale = m.slowMo > 0 ? 0.32 : 1
   acc += realDt * scale
   let steps = 0
@@ -584,8 +570,6 @@ function updateFight(realDt) {
   if (steps === 8) acc = 0
 
   for (const ev of m.drainEvents()) handleEvent(ev)
-
-  if (!app.cowUsed && m.phase === 'fight' && m.timer <= 45) spawnCow()
 
   updateRigs(realDt)
   updateCamera(realDt)
@@ -652,17 +636,6 @@ function updatePendingResult(realDt) {
   document.body.classList.remove('in-battle')
 }
 
-function spawnCow() {
-  app.cowUsed = true
-  app.cowActive = true
-  app.cow = createCow(app.scene)
-  app.ui.announce('GAU MATA!', 'cow')
-  app.ui.commentary('godi', 'Gau Mata on stage! The fight pauses with full respect.')
-  app.ui.commentary('troll', 'The cow has better timing than both of them.')
-  app.ui.pushTicker('BREAKING: Stray cow halts the tournament. Nobody dares to honk.', true)
-  app.audio.play('moo')
-}
-
 function updateRigs(dt) {
   const m = app.match
   if (!m) return
@@ -674,9 +647,23 @@ function updateRigs(dt) {
       app.superSeq.updateRig(i, dt)
       continue
     }
-    rig.root.position.set(f.x, f.y, 0)
-    rig.setFacing(f.facing)
-    rig.update(poseFor(f), dt)
+    if (app.netMode) {
+      // Snapshots arrive at 30 Hz; interpolate so remote fighters do not
+      // teleport between packets.
+      const k = 1 - Math.exp(-24 * dt)
+      if (Math.abs(f.x - rig.root.position.x) > 2.5) rig.root.position.x = f.x
+      else rig.root.position.x += (f.x - rig.root.position.x) * k
+      if (f._smoothY == null) f._smoothY = f.y
+      f._smoothY += (f.y - f._smoothY) * k
+      rig.setFacing(f.facing)
+      const pose = poseFor(f)
+      pose.y = f._smoothY
+      rig.update(pose, dt)
+    } else {
+      rig.root.position.set(f.x, f.y, 0)
+      rig.setFacing(f.facing)
+      rig.update(poseFor(f), dt)
+    }
   }
 }
 
@@ -784,9 +771,10 @@ function updateCamera(dt) {
   cam.lookAt(look)
 
   if (app.shake > 0.001) {
-    cam.position.x += (Math.random() - 0.5) * app.shake
-    cam.position.y += (Math.random() - 0.5) * app.shake
-    app.shake *= Math.exp(-8 * dt)
+    const s = app.shake
+    cam.position.x += Math.sin(app.time * 92) * s * 0.55
+    cam.position.y += Math.cos(app.time * 77) * s * 0.45
+    app.shake *= Math.exp(-9 * dt)
   }
   const fov = 42 + Math.min(4, dist * 0.15)
   cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt))

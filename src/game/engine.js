@@ -263,13 +263,16 @@ export class Fighter {
   }
 
   applyHit(def, damage, dir) {
+    const wasActive = !!this.attack &&
+      this.attack.frame > this.attack.def.startup &&
+      this.attack.frame <= this.attack.def.startup + this.attack.def.active
     this.hp = Math.max(0, this.hp - damage)
-    this.attack = null
+    if (!wasActive) this.attack = null
     this.comboHits++
     this.lastHitHeight = def.height
     this.crouching = false
     this.flash = 6
-    if (this.hp <= 0) { this.knockOut(dir, 3.4, 6.5); return }
+    if (this.hp <= 0) { this.knockOut(dir, 3.4, 6.5, wasActive); return }
     if (def.knockdown || this.airborne) {
       this.forceState('knockdown')
       this.vx = dir * (def.push + 0.8)
@@ -283,9 +286,9 @@ export class Fighter {
     }
   }
 
-  knockOut(dir, vx, vy) {
+  knockOut(dir, vx, vy, keepAttack = false) {
     this.hp = 0
-    this.attack = null
+    if (!keepAttack) this.attack = null
     this.forceState('ko')
     this.vx = dir * vx
     this.vy = vy
@@ -338,12 +341,14 @@ export class Match {
     this.perfect = false
     this.slowMo = 0
     this.rng = Math.random
+    this.doubleKos = 0
   }
 
   emit(ev) { this.events.push(ev) }
   drainEvents() { const e = this.events; this.events = []; return e }
 
   start() {
+    for (const f of this.fighters) f.forceState('intro')
     this.emit({ type: 'roundStart', round: this.round, final: this.round >= 2 * this.roundsToWin - 1 })
     this.emit({ type: 'announce', text: `ROUND ${this.round}` })
     this.phase = 'intro'
@@ -363,7 +368,12 @@ export class Match {
         this.emit({ type: 'announce', text: 'FIGHT!', cls: 'fight' })
         this.emit({ type: 'fight' })
       }
-      if (this.phaseTime > 1.9) { this.phase = 'fight'; this.phaseTime = 0; this._fightCalled = false }
+      if (this.phaseTime > 1.9) {
+        this.phase = 'fight'
+        this.phaseTime = 0
+        this._fightCalled = false
+        for (const f of this.fighters) f.forceState('idle')
+      }
       this.fighters[0].update(makeInput(), this.fighters[1].x)
       this.fighters[1].update(makeInput(), this.fighters[0].x)
       return
@@ -396,9 +406,9 @@ export class Match {
 
     // Fight phase
     if (this.hitStop > 0) {
+      // Freeze both fighters completely for a punchy hit-stop; advancing
+      // attack frames here made strikes skip their contact pose.
       this.hitStop--
-      this.fighters[0].update(makeInput(), this.fighters[1].x)
-      this.fighters[1].update(makeInput(), this.fighters[0].x)
       return
     }
 
@@ -437,7 +447,7 @@ export class Match {
 
     // Push boxes
     const dx = b.x - a.x
-    const minGap = 0.72
+    const minGap = 0.82
     if (Math.abs(dx) < minGap) {
       const push = (minGap - Math.abs(dx)) / 2 * (dx >= 0 ? 1 : -1)
       a.x -= push
@@ -449,7 +459,11 @@ export class Match {
     this.resolveAttack(a, b)
     this.resolveAttack(b, a)
 
-    if (a.hp <= 0 || b.hp <= 0) this.endRound(a.hp > 0 ? 0 : 1, false)
+    const aDead = a.hp <= 0
+    const bDead = b.hp <= 0
+    if (aDead && bDead) this.endDoubleKo()
+    else if (aDead) this.endRound(1, false)
+    else if (bDead) this.endRound(0, false)
   }
 
   resolveAttack(attacker, defender) {
@@ -479,7 +493,6 @@ export class Match {
       this.emit({ type: 'grab', side: attacker.side, move: attacker.char.moveNames.grab, x: hitX, y: hitY, damage: dmg })
       this.emit({ type: 'hit', side: attacker.side, move: attacker.char.moveNames.grab, x: hitX, y: hitY, damage: dmg, knockdown: true, grab: true })
       this.hitStop = 8
-      if (defender.hp <= 0) this.endRound(attacker.side, false)
       return
     }
 
@@ -504,7 +517,6 @@ export class Match {
       ko: defender.state === 'ko', height, combo: defender.comboHits,
     })
     this.hitStop = defender.state === 'ko' ? 14 : 6
-    if (defender.hp <= 0) this.endRound(attacker.side, false)
   }
 
   startSuper(side) {
@@ -545,6 +557,28 @@ export class Match {
     this.phaseTime = 0
     this.hitStop = 8
     if (target.hp <= 0) this.endRound(side, false)
+  }
+
+  endDoubleKo() {
+    if (this.phase === 'ko' || this.phase === 'roundEnd' || this.phase === 'matchEnd') return
+    this.phase = 'ko'
+    this.phaseTime = 0
+    this.slowMo = 0.8
+    this.perfect = false
+    this.timeUp = false
+    this.doubleKos = (this.doubleKos || 0) + 1
+    for (const f of this.fighters) f.forceState('ko')
+    if (this.doubleKos >= 2) {
+      // Two consecutive double K.O.s: award the round on SHAKTI so a match
+      // cannot loop forever on mutual KOs.
+      const w = this.fighters[0].meter >= this.fighters[1].meter ? 0 : 1
+      this.wins[w]++
+      this.roundWinner = w
+      this.emit({ type: 'ko', side: w, doubleKo: true, timeUp: false, perfect: false, text: 'DOUBLE K.O.' })
+    } else {
+      this.roundWinner = null
+      this.emit({ type: 'ko', side: null, doubleKo: true, timeUp: false, perfect: false, text: 'DOUBLE K.O.' })
+    }
   }
 
   endRound(winnerSide, timeUp) {
@@ -593,6 +627,7 @@ export class Match {
     this.roundWinner = null
     this.fighters[0].reset(-2.6)
     this.fighters[1].reset(2.6)
+    for (const f of this.fighters) f.forceState('intro')
     this.phase = 'intro'
     this.phaseTime = 0
     this._fightCalled = false

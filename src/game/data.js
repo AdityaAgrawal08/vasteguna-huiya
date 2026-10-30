@@ -276,7 +276,7 @@ export const COMMENTARY = {
     'Traffic snarls at Raisina Hill as fans gather',
     'Samosa prices at the canteen remain mysteriously subsidised',
     'Exit polls predict both sides will claim victory',
-    'Stray cow spotted near Vijay Chowk. Fighters alerted.',
+    'Traffic advisory issued for Raisina Hill. Nobody read it.',
     'Chaiwala reports record sales in the stands',
     'Breaking: nothing happened. Details at nine.',
     'WhatsApp University launches a degree in fight analysis',

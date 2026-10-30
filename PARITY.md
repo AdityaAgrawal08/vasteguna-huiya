@@ -18,12 +18,13 @@ implemented; **GAP** = original file cannot be recreated without copying it.
 | Grabs | grab + grab break | same | MATCH |
 | Super meter | SHAKTI, 0–100, full-meter super | same | MATCH |
 | Supers | six named supers, 30% damage, unique cinematic | six procedural cinematics, 30% damage | EQUIV |
-| Rounds | 60 s timer, best of three, win dots | same | MATCH |
+| Rounds | 60 s timer, best of three, win dots, double K.O. | same + double K.O. replay handling | MATCH |
+| Fight feel | hit-stop, camera shake, 60 Hz sim | frozen hit-stop, smoothed camera shake, 60 Hz sim, 30 Hz online interpolation, adaptive quality | MATCH |
 | Stages | SANSAD BHAVAN, JANTAR MANTAR, DESI SADAK | three procedural stages with matching names/palettes/landmarks | EQUIV |
 | Stage props | parliament, Jantar instruments, street, crowds, flags, thela | recreated procedurally (arena.js) | EQUIV |
 | 3D character models | `/models/{modi,rahul,didi,trump,yogi,nitin}.glb` + `/models/bull1.glb` | procedural rigs with per-character costume, hair, beard, glasses, proportions | **GAP** (proprietary GLBs) |
 | Face portraits | `faces/{id}.png` photos | canvas caricature portraits | **GAP** (proprietary photos) |
-| Fight animations | procedural + GLB `dance` clip | procedural idle/walk/crouch/jump/block/hit/knockdown/attacks + six victory dances | EQUIV (no GLB dance clips) |
+| Fight animations | procedural + GLB `dance` clip | procedural idle/walk/crouch/jump/block/hit/knockdown/attacks, six character intro poses + six victory dances | EQUIV (no GLB dance clips) |
 | Intro / win lines | per-character lines, recorded voice | same lines shown as speech bubbles and spoken via speech synthesis | EQUIV (no recorded voice) |
 | Voice clips | character + announcer MP3s | speech-synthesis slots with per-character pitch/rate | **GAP** (recorded MP3s) |
 | Music | three MP3 loops | three procedural WebAudio tracks | **GAP** (recorded MP3s) |
@@ -32,8 +33,8 @@ implemented; **GAP** = original file cannot be recreated without copying it.
 | Newsdesk | two anchors, live desk, ticker, commentary | same structure, original commentary writing | EQUIV |
 | Pause | CHAI BREAK ☕, resume/sound/quit | same | MATCH |
 | Result | THE DAILY JUMLA newspaper, headline, photo, excuse, stamp | same layout, original newspaper writing | EQUIV |
-| Ambient events | cow halts fight, chai cup break, dances, chaiwala | cow event, chai cup shatter, victory dances, chai-break pause | EQUIV |
-| Controls | A/D/W/S, J/K/I, L/Space, Esc, M/N; touch stick/buttons | same | MATCH |
+| Ambient events | chai cup break, dances, chaiwala | chai cup shatter, victory dances, chai-break pause (cow event removed on request) | EQUIV |
+| Controls | A/D/W/S, J/K/I, L/Space, Esc, M/N; touch stick/buttons | same, mobile viewport/touch verified | MATCH |
 | CPU | EASY / NORMAL / HARD | same three profiles with reaction/block/aggression differences | MATCH |
 | Character select | 3D previews, VS plates, tiles, stage/CPU options | same flow, 3D previews | MATCH |
 | Online rooms | WebRTC + `/api/room` relay, 6-char code | WebSocket authoritative room server, 6-char code, host/join/picks/stage/rematch/disconnect | EQUIV (different transport) |
