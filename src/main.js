@@ -577,8 +577,9 @@ function updateFight(realDt) {
   updateTicker(realDt)
 
   if (m.phase === 'super' && app.superSeq) {
-    const done = app.superSeq.step(realDt)
-    if (done && app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
+    // Hold the final pose until the engine resolves; disposing early would
+    // snap the fighters back to neutral mid-cinematic.
+    app.superSeq.step(realDt)
   } else if (app.superSeq && m.phase !== 'super') {
     app.superSeq.dispose()
     app.superSeq = null
@@ -611,8 +612,7 @@ function updateNetFight(realDt) {
   updateTicker(realDt)
 
   if (m.phase === 'super' && app.superSeq) {
-    const done = app.superSeq.step(realDt)
-    if (done && app.superSeq) { app.superSeq.dispose(); app.superSeq = null }
+    app.superSeq.step(realDt)
   } else if (app.superSeq && m.phase !== 'super') {
     app.superSeq.dispose()
     app.superSeq = null
@@ -871,6 +871,8 @@ function handleEvent(ev) {
       app.superSeq = createSuperSequence({
         scene: app.scene, camera: app.camera, rigs: app.rigs, side: ev.side,
         charId: ev.charId, audio, fx: app.fx, fighters: m.fighters,
+        onShake: (v) => { app.shake = Math.max(app.shake, v) },
+        onFlash: (color, ms) => ui.flash(color, ms),
       })
       break
     }

@@ -1136,7 +1136,9 @@ export function createFighterRig(charId) {
     }
   }
 
-  function applySuper(P, t) {
+  function applySuper(P, t, anim) {
+    // base: charging stance shared by every super
+    const pulse = Math.sin(t * 6)
     P.hipsPos.y = 0.015 * H + Math.sin(t * 2) * 0.01 * H
     P.hipsRot.y = Math.sin(t * 1.2) * 0.1
     P.torso.x = 0.06
@@ -1155,6 +1157,345 @@ export function createFighterRig(charId) {
     P.legR.z = 0.18
     P.kneeL.x = 0.25
     P.kneeR.x = 0.25
+    if (anim) applySuperAnim(P, t, anim, pulse, H)
+  }
+
+  // Bespoke gestures driven by the cinematic director through pose.superAnim.
+  function applySuperAnim(P, t, anim, pulse, H) {
+    switch (anim) {
+      case 'pointUp': {
+        // Right arm straight up, index finger to the sky.
+        P.armR.x = -3.14 + pulse * 0.04
+        P.armR.z = 0.16
+        P.elbowR.x = -0.04
+        P.armL.x = -0.35
+        P.armL.z = -0.95
+        P.elbowL.x = -0.4
+        P.torso.x = -0.14
+        P.chest.x = -0.06
+        P.head.x = -0.55
+        P.head.y = 0.1
+        P.legL.z = -0.24
+        P.legR.z = 0.24
+        P.kneeL.x = 0.3
+        P.kneeR.x = 0.3
+        break
+      }
+      case 'pointAt': {
+        // Swing the pointing hand down at the opponent.
+        P.armR.x = -1.62 + pulse * 0.05
+        P.armR.z = 0.06
+        P.elbowR.x = -0.06
+        P.armL.x = -0.6
+        P.armL.z = -1.0
+        P.elbowL.x = -0.5
+        P.torso.x = 0.26
+        P.torso.y = -0.22
+        P.head.x = 0.14
+        P.head.y = -0.1
+        P.legL.x = -0.3
+        P.legR.x = 0.18
+        P.kneeL.x = 0.5
+        break
+      }
+      case 'throw': {
+        // Full-body hurl off the fingertip.
+        P.hipsPos.z = 0.05 * H
+        P.armR.x = -1.5
+        P.armR.z = 0.2
+        P.elbowR.x = 0.0
+        P.armL.x = -0.2
+        P.armL.z = -1.1
+        P.elbowL.x = -0.9
+        P.torso.x = 0.34
+        P.torso.y = -0.34
+        P.chest.y = -0.14
+        P.head.x = 0.2
+        P.legL.x = -0.5
+        P.legR.x = 0.45
+        P.kneeL.x = 0.8
+        P.kneeR.x = 0.15
+        break
+      }
+      case 'punchHead': {
+        // Flying punch aimed at the skull.
+        P.hipsPos.y = 0.06 * H
+        P.hipsPos.z = 0.06 * H
+        P.torso.x = -0.2
+        P.torso.y = 0.5
+        P.armR.x = -1.75
+        P.armR.z = 0.1
+        P.elbowR.x = -0.05
+        P.armL.x = -0.55
+        P.armL.z = -0.85
+        P.elbowL.x = -1.5
+        P.legL.x = -0.75
+        P.legR.x = 0.5
+        P.kneeL.x = 1.2
+        P.kneeR.x = 0.1
+        P.head.x = 0.1
+        break
+      }
+      case 'carry': {
+        P.armL.x = -1.15
+        P.armR.x = -1.15
+        P.armL.z = 0.34
+        P.armR.z = -0.34
+        P.elbowL.x = -1.35
+        P.elbowR.x = -1.35
+        P.torso.x = 0.14
+        P.hipsPos.y = -0.03 * H
+        P.head.x = 0.2
+        P.kneeL.x = 0.4
+        P.kneeR.x = 0.4
+        break
+      }
+      case 'feed': {
+        P.armL.x = -1.5
+        P.armR.x = -1.5
+        P.armL.z = 0.2
+        P.armR.z = -0.2
+        P.elbowL.x = -0.55
+        P.elbowR.x = -0.55
+        P.torso.x = 0.34
+        P.head.x = 0.26
+        P.hipsPos.z = 0.05 * H
+        P.kneeL.x = 0.45
+        P.kneeR.x = 0.45
+        break
+      }
+      case 'admire': {
+        P.armR.x = -2.75
+        P.armR.z = 0.34
+        P.elbowR.x = -0.7
+        P.armL.x = -0.45
+        P.armL.z = -0.8
+        P.elbowL.x = -0.55
+        P.head.x = -0.5
+        P.head.y = -0.14
+        P.torso.x = -0.1
+        P.hipsRot.y = Math.sin(t * 1.6) * 0.16
+        break
+      }
+      case 'stir': {
+        P.armR.x = -1.45
+        P.armR.z = 0.2
+        P.elbowR.x = -0.75
+        P.armL.x = -0.6
+        P.armL.z = -0.7
+        P.elbowL.x = -1.0
+        P.torso.x = 0.24
+        P.torso.y = Math.sin(t * 3.4) * 0.3
+        P.head.x = 0.16
+        P.kneeL.x = 0.35
+        P.kneeR.x = 0.35
+        break
+      }
+      case 'chant': {
+        P.armL.x = -2.55
+        P.armR.x = -2.55
+        P.armL.z = -0.7
+        P.armR.z = 0.7
+        P.elbowL.x = -0.55
+        P.elbowR.x = -0.55
+        P.torso.x = -0.16
+        P.head.x = -0.4
+        P.hipsPos.y = Math.abs(Math.sin(t * 4)) * 0.03 * H
+        P.legL.x = -0.1
+        P.legR.x = 0.1
+        break
+      }
+      case 'stomp': {
+        P.hipsPos.y = -0.14 * H
+        P.torso.x = 0.36
+        P.head.x = 0.24
+        P.legR.x = -1.1
+        P.kneeR.x = 1.5
+        P.legL.x = 0.1
+        P.kneeL.x = 0.7
+        P.armL.x = -0.9
+        P.armR.x = -0.4
+        P.armL.z = -0.4
+        break
+      }
+      case 'sign': {
+        P.armR.x = -1.4
+        P.armR.z = 0.24
+        P.elbowR.x = -1.15
+        P.armL.x = -1.1
+        P.armL.z = -0.3
+        P.elbowL.x = -1.25
+        P.torso.x = 0.1
+        P.head.x = 0.34
+        P.head.y = 0.1
+        P.kneeL.x = 0.2
+        P.kneeR.x = 0.2
+        break
+      }
+      case 'whirl': {
+        P.hipsRot.y = Math.sin(t * 3) * 0.4
+        P.torso.y = Math.sin(t * 3) * 0.35
+        P.armR.x = -1.35
+        P.armR.z = 0.55 + Math.sin(t * 3) * 0.5
+        P.elbowR.x = -0.3
+        P.armL.x = -0.75
+        P.armL.z = -0.9
+        P.elbowL.x = -0.7
+        P.legL.x = -0.28
+        P.legR.x = 0.28
+        P.kneeL.x = 0.4
+        P.kneeR.x = 0.4
+        break
+      }
+      case 'slam': {
+        P.hipsPos.y = -0.16 * H
+        P.torso.x = 0.5
+        P.chest.x = 0.16
+        P.head.x = 0.3
+        P.armL.x = -2.9 + Math.sin(t * 14) * 0.1
+        P.armR.x = -2.9 - Math.sin(t * 14) * 0.1
+        P.armL.z = -0.16
+        P.armR.z = 0.16
+        P.elbowL.x = -0.5
+        P.elbowR.x = -0.5
+        P.kneeL.x = 1.0
+        P.kneeR.x = 1.0
+        P.legL.x = -0.4
+        P.legR.x = -0.4
+        break
+      }
+      case 'glare': {
+        P.torso.x = -0.1
+        P.head.x = -0.2
+        P.armR.x = -1.45
+        P.armR.z = 0.1
+        P.elbowR.x = -0.1
+        P.armL.x = -0.5
+        P.armL.z = -0.85
+        P.elbowL.x = -0.7
+        P.legL.x = -0.16
+        P.legR.x = 0.16
+        P.legL.z = -0.2
+        P.legR.z = 0.2
+        break
+      }
+      case 'beckon': {
+        P.armR.x = -1.25
+        P.armR.z = 0.5
+        P.elbowR.x = -1.35 + Math.sin(t * 5) * 0.35
+        P.armL.x = -0.4
+        P.armL.z = -0.8
+        P.elbowL.x = -0.6
+        P.head.x = -0.1
+        P.torso.y = -0.2
+        break
+      }
+      case 'bow': {
+        P.torso.x = 0.44
+        P.head.x = 0.34
+        P.armL.x = -1.15
+        P.armR.x = -1.15
+        P.armL.z = 0.72
+        P.armR.z = -0.72
+        P.elbowL.x = -2.1
+        P.elbowR.x = -2.1
+        P.kneeL.x = 0.5
+        P.kneeR.x = 0.5
+        P.legL.x = -0.24
+        P.legR.x = -0.24
+        break
+      }
+      case 'feedCane': {
+        P.armL.x = -1.7
+        P.armR.x = -1.05
+        P.armL.z = 0.24
+        P.armR.z = -0.3
+        P.elbowL.x = -0.5
+        P.elbowR.x = -1.25
+        P.torso.x = 0.2
+        P.head.x = 0.18
+        P.kneeL.x = 0.35
+        P.kneeR.x = 0.35
+        break
+      }
+      case 'pour': {
+        P.torso.x = 0.42
+        P.head.x = 0.3
+        P.armR.x = -1.55
+        P.armR.z = 0.1
+        P.elbowR.x = -0.2
+        P.armL.x = -1.2
+        P.armL.z = -0.25
+        P.elbowL.x = -0.7
+        P.hipsPos.y = -0.07 * H
+        P.kneeL.x = 0.6
+        P.kneeR.x = 0.6
+        break
+      }
+      case 'flick': {
+        P.armR.x = -1.35
+        P.armR.z = 0.4
+        P.elbowR.x = -0.35
+        P.armL.x = -0.4
+        P.armL.z = -0.75
+        P.elbowL.x = -0.5
+        P.torso.y = -0.3
+        P.head.x = -0.12
+        P.head.y = -0.2
+        P.legL.x = -0.2
+        P.legR.x = 0.2
+        break
+      }
+      case 'walkOff': {
+        P.torso.y = -0.4
+        P.head.y = -0.4
+        P.head.x = -0.18
+        P.armL.x = -0.35
+        P.armR.x = -0.3
+        P.armL.z = -0.5
+        P.armR.z = 0.5
+        P.legL.x = Math.sin(t * 4) * 0.55
+        P.legR.x = -Math.sin(t * 4) * 0.55
+        P.kneeL.x = Math.max(0, Math.sin(t * 4)) * 0.5
+        P.kneeR.x = Math.max(0, -Math.sin(t * 4)) * 0.5
+        P.hipsRot.y = Math.sin(t * 4) * 0.12
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  // The opponent being magically reshaped (potato / frog / flattened ...).
+  function applyTransform(P, t, kind) {
+    const k = clamp(t / 0.5, 0, 1)
+    P.hipsPos.y = mix(0, -0.3 * H, k)
+    P.torso.x = mix(0, 0.55, k)
+    P.chest.x = mix(0, 0.2, k)
+    P.head.x = mix(0, 0.5, k)
+    P.armL.x = mix(-0.1, -0.9, k)
+    P.armR.x = mix(-0.1, -0.9, k)
+    P.armL.z = mix(-0.2, -1.35, k)
+    P.armR.z = mix(0.2, 1.35, k)
+    P.elbowL.x = mix(-0.3, -2.4, k)
+    P.elbowR.x = mix(-0.3, -2.4, k)
+    P.legL.x = mix(0, -1.4, k)
+    P.legR.x = mix(0, -1.4, k)
+    P.kneeL.x = mix(0.08, 2.3, k)
+    P.kneeR.x = mix(0.08, 2.3, k)
+    P.legL.z = mix(0, -0.55, k)
+    P.legR.z = mix(0, 0.55, k)
+    if (kind === 'aloo') {
+      P.hipsPos.y = mix(0, -0.42 * H, k)
+      P.torso.x = mix(0, 0.9, k)
+    } else if (kind === 'flat') {
+      P.hipsPos.y = mix(0, -0.5 * H, k)
+      P.torso.x = mix(0, 1.5, k)
+    } else if (kind === 'croak') {
+      P.hipsPos.y = mix(0, -0.34 * H, k)
+      P.torso.x = mix(0, 0.1, k)
+      P.head.x = mix(0, -0.5, k)
+    }
   }
 
   function applyFrozen(P, t) {
@@ -1724,6 +2065,55 @@ export function createFighterRig(charId) {
         break
       }
 
+      case 'skyUppercut': {
+        // Down (S) + Punch: coiled low, then detonates upward into a sky
+        // uppercut that launches the opponent overhead.
+        const rise = hit ? 1 : wind ? 0 : 0.35
+        P.hipsPos.y = mix(-0.34 * H, 0.14 * H, rise)
+        P.hipsPos.z = mix(-0.03 * H, 0.04 * H, rise)
+        P.legL.x = mix(-1.15, -0.1, rise)
+        P.legR.x = mix(-1.1, 0.1, rise)
+        P.kneeL.x = mix(2.0, 0.05, rise)
+        P.kneeR.x = mix(1.9, 0.05, rise)
+        P.legL.z = mix(-0.18, -0.1, rise)
+        P.legR.z = mix(0.18, 0.1, rise)
+        P.torso.x = mix(0.36, -0.24, rise)
+        P.chest.x = mix(0.1, -0.1, rise)
+        if (wind) {
+          P.torso.y = 0.34
+          P.hipsRot.y = -0.16
+          P.armR.x = 0.9
+          P.armR.z = 0.3
+          P.elbowR.x = -1.75
+          P.armL.x = -0.35
+          P.armL.z = -0.45
+          P.elbowL.x = -1.85
+          P.head.x = 0.22
+        } else if (hit) {
+          // full extension, fist to the sky
+          P.armR.x = -3.05
+          P.armR.z = 0.14
+          P.elbowR.x = -0.06
+          P.armL.x = -0.5
+          P.armL.z = -1.0
+          P.elbowL.x = -0.7
+          P.torso.y = -0.3
+          P.hipsRot.y = 0.2
+          P.head.x = -0.55
+          P.head.y = 0.1
+          setGuard(P, -1)
+        } else {
+          P.armR.x = -1.7
+          P.armR.z = 0.2
+          P.elbowR.x = -0.7
+          P.armL.x = -0.4
+          P.armL.z = -0.6
+          P.elbowL.x = -1.3
+          P.head.x = -0.2
+        }
+        break
+      }
+
       default: {
         // Unknown move: treat as a straight punch.
         P.armR.x = hit ? -1.55 : wind ? 0.35 : -0.8
@@ -1815,9 +2205,10 @@ export function createFighterRig(charId) {
     } else if (state === 'intro') {
       applyIntro(target, stateT)
     } else if (state === 'super') {
-      applySuper(target, stateT)
+      applySuper(target, stateT, pose.superAnim)
     } else if (state === 'frozen') {
-      applyFrozen(target, stateT)
+      if (pose.transform) applyTransform(target, stateT, pose.transform)
+      else applyFrozen(target, stateT)
     }
 
     if (pose.airborne && (state === 'idle' || state === 'walk')) {

@@ -29,8 +29,11 @@ npm run preview
 | Pause | Esc |
 | Music / mute | M / N |
 
-Specials: →Punch, →Kick, ↓Kick (sweep). Combos: J,J,J · J,J,J,K · J,K,K · K,K ·
-↓J,J · ↓J,K. Touch devices get an on-screen stick and PUNCH / KICK / GRAB / SUPER.
+Down-state (hold S): **Punch = SKY UPPERCUT** (launches the opponent overhead),
+**Kick = SWEEP** (knocks down).
+
+Specials: →Punch, →Kick, ↓Kick (sweep). Combos: J,J,J · J,J,J,K · J,K,K · K,K.
+Touch devices get an on-screen stick and PUNCH / KICK / GRAB / SUPER.
 
 ## Roster
 
@@ -52,7 +55,8 @@ Stages: Sansad Bhavan, Jantar Mantar, Desi Sadak. CPU difficulty: Easy / Normal 
 - `src/game/ai.js` — CPU planner with difficulty profiles
 - `src/game/fighters3d.js` — procedural character rigs and animation
 - `src/game/arena.js` — procedural stage geometry, lighting, camera
-- `src/game/supers.js` — six cinematic super-move sequences
+- `src/game/supers.js` — six cinematic super-move sequences (see `CINEMATICS.md`)
+- `CINEMATICS.md` — every fighter state, transition, gesture and super timeline
 - `src/game/audio.js` — WebAudio SFX and procedural music
 - `src/ui.js`, `src/style.css`, `index.html` — screens, HUD, newsdesk, newspaper
 - `src/input.js` — keyboard + touch input

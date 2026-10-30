@@ -204,12 +204,24 @@ export class UI {
   flash(color = '#fff', ms = 120) {
     const el = this.flashEl
     el.style.background = color
-    el.style.transition = 'none'
-    el.style.opacity = '0.85'
-    requestAnimationFrame(() => {
-      el.style.transition = `opacity ${ms}ms ease-out`
-      el.style.opacity = '0'
-    })
+    // Use the Web Animations API so the fade is time-based: a stalled or slow
+    // frame can no longer leave an 85% white overlay stuck on the screen.
+    if (el._anim) { try { el._anim.cancel() } catch {} el._anim = null }
+    if (el.animate) {
+      el.style.opacity = '1'
+      el._anim = el.animate(
+        [{ opacity: 0.85 }, { opacity: 0 }],
+        { duration: Math.max(60, ms), easing: 'ease-out', fill: 'forwards' },
+      )
+      try { el._anim.onfinish = () => { el.style.opacity = '0'; el._anim = null } } catch {}
+    } else {
+      el.style.transition = 'none'
+      el.style.opacity = '0.85'
+      setTimeout(() => {
+        el.style.transition = `opacity ${ms}ms ease-out`
+        el.style.opacity = '0'
+      }, 16)
+    }
   }
 
   showSuperBanner(charId, name, superName, side) {

@@ -7,7 +7,7 @@ export const DT = 1 / FPS
 export const ROUND_SECONDS = 60
 export const ROUNDS_TO_WIN = 2
 export const SUPER_DAMAGE = 30
-export const SUPER_DURATION = 4.2
+export const SUPER_DURATION = 4.6
 
 const BLOCKED_STATES = new Set(['super', 'frozen', 'victory', 'intro', 'ko'])
 const INVULNERABLE_STATES = new Set(['knockdown', 'getup', 'ko', 'super', 'frozen', 'victory', 'intro'])
@@ -512,7 +512,7 @@ export class Match {
     defender.addMeter(dmg * 0.6)
     attacker.vx = -dir * a.def.push * 0.8
     this.emit({
-      type: 'hit', side: attacker.side, move: attacker.char.moveNames[a.def.id] || MOVE_LABELS[a.def.id] || 'HIT!',
+      type: 'hit', side: attacker.side, move: attacker.char.moveNames[a.def.id] || (a.def.id === 'skyUppercut' ? (attacker.char.moveNames.uppercut || 'SKY UPPERCUT!') : (MOVE_LABELS[a.def.id] || 'HIT!')),
       x: hitX, y: hitY, damage: dmg, knockdown: defender.state === 'knockdown',
       ko: defender.state === 'ko', height, combo: defender.comboHits,
     })
@@ -543,14 +543,26 @@ export class Match {
     const caster = this.fighters[side]
     const target = this.fighters[1 - side]
     const dmg = Math.round(SUPER_DAMAGE * caster.char.damageMul)
-    target.forceState('knockdown')
+    // The opponent is transformed/obliterated, then comes back on their feet
+    // with less energy. `getup` animates them rising to a neutral stance.
+    target.forceState('getup')
+    target.y = 0
+    target.vy = 0
+    target.vx = caster.facing * 0.9
+    target.grounded = true
     target.hp = Math.max(0, target.hp - dmg)
-    target.vx = caster.facing * 5.5
-    target.vy = 6
-    target.grounded = false
     target.flash = 12
     target.comboHits = 0
     caster.addMeter(0)
+    // Release the caster from the frozen `super` state, otherwise
+    // BLOCKED_STATES keeps them locked forever and they "stop working".
+    caster.forceState('idle')
+    caster.vx = 0
+    caster.vy = 0
+    caster.y = 0
+    caster.grounded = true
+    caster.attack = null
+    caster.buffer = null
     this.emit({ type: 'superHit', side, damage: dmg, x: target.x, y: target.y + 1 })
     this.super = null
     this.phase = 'fight'

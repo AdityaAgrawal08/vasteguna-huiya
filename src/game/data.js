@@ -201,6 +201,7 @@ export const MOVES = {
   roundhouse: { id: 'roundhouse', startup: 11, active: 5, recovery: 22, damage: 13, height: 'high', reach: 1.45, hitstun: 26, blockstun: 16, knockdown: true, launch: 5, push: 4.5, lunge: 0.8 },
   finisher: { id: 'finisher', startup: 10, active: 4, recovery: 20, damage: 12, height: 'mid', reach: 1.35, hitstun: 24, blockstun: 15, knockdown: true, launch: 5.5, push: 3.5, lunge: 1.2 },
   lowJab: { id: 'lowJab', startup: 6, active: 3, recovery: 11, damage: 4, height: 'low', reach: 1.0, hitstun: 18, blockstun: 9, knockdown: false, launch: 0, push: 1.2, lunge: 0.4, crouching: true, chains: { punch: 'uppercut', kick: 'sweep' } },
+  skyUppercut: { id: 'skyUppercut', startup: 8, active: 4, recovery: 21, damage: 10, height: 'mid', reach: 1.1, hitstun: 24, blockstun: 15, knockdown: true, launch: 10.5, push: 1.2, lunge: 0.55, crouching: true },
   sweep: { id: 'sweep', startup: 11, active: 4, recovery: 20, damage: 8, height: 'low', reach: 1.4, hitstun: 22, blockstun: 14, knockdown: true, launch: 3.2, push: 1.6, lunge: 0.4, crouching: true },
   special1: { id: 'special1', startup: 13, active: 4, recovery: 19, damage: 13, height: 'mid', reach: 1.1, hitstun: 26, blockstun: 16, knockdown: true, launch: 7.5, push: 2.2, lunge: 1.8, chains: { kick: 'finisher' } },
   special2: { id: 'special2', startup: 15, active: 5, recovery: 20, damage: 14, height: 'mid', reach: 1.55, hitstun: 26, blockstun: 16, knockdown: true, launch: 4.5, push: 5.2, lunge: 1.4 },
@@ -213,13 +214,15 @@ export const MOVE_LABELS = {
   jab: 'JAB', cross: 'CROSS', kick: 'KICK', finisher: 'FINISHER', uppercut: 'UPPERCUT',
   roundhouse: 'ROUNDHOUSE', lowJab: 'LOW JAB', sweep: 'SWEEP', special1: 'SPECIAL',
   special2: 'SPECIAL', airPunch: 'AIR PUNCH', airKick: 'AIR KICK', grab: 'GRAB',
+  skyUppercut: 'SKY UPPERCUT',
 }
 
 export const ARENA_HALF_WIDTH = 9.2
 
 export function pickMove(button, crouching, forward) {
   if (button === 'grab') return 'grab'
-  if (crouching) return button === 'punch' ? 'lowJab' : 'sweep'
+  // Crouched (S) + Punch = SKY UPPERCUT (rising launch); crouched (S) + Kick = SWEEP.
+  if (crouching) return button === 'punch' ? 'skyUppercut' : 'sweep'
   if (forward) return button === 'punch' ? 'special1' : 'special2'
   return button === 'punch' ? 'jab' : 'kick'
 }

@@ -63,6 +63,24 @@ function place(match, x1, x2) {
   assert.ok(hits[0].damage >= 12, `special damage ${hits[0].damage}`)
 }
 
+// 5a. crouch + punch is the SKY UPPERCUT and launches the opponent
+{
+  const m = new Match({ p1: 'modi', p2: 'rahul' })
+  m.start(); skipIntro(m)
+  place(m, -0.5, 0.5)
+  m.step([makeInput({ down: true, punch: true }), empty], DT)
+  let peak = 0
+  for (let i = 0; i < 34; i++) {
+    m.step([empty, empty], DT)
+    peak = Math.max(peak, m.fighters[1].y)
+  }
+  const hits = m.drainEvents().filter((e) => e.type === 'hit')
+  assert.equal(hits.length, 1, 'sky uppercut lands once')
+  assert.equal(hits[0].knockdown, true, 'sky uppercut knocks down')
+  assert.ok(hits[0].damage >= 8, `sky uppercut damage ${hits[0].damage}`)
+  assert.ok(peak > 0.5, `sky uppercut must LAUNCH the opponent off the floor, peak y=${peak}`)
+}
+
 // 5. crouch + kick is a sweep that knocks down
 {
   const m = new Match({ p1: 'didi', p2: 'trump' })
@@ -75,7 +93,7 @@ function place(match, x1, x2) {
   assert.equal(hits[0].knockdown, true, 'sweep should knock down')
 }
 
-// 6. super consumes a full meter and deals 30%
+// 6. super consumes a full meter, deals 30%, and RELEASES both fighters
 {
   const m = new Match({ p1: 'yogi', p2: 'nitin' })
   m.start(); skipIntro(m)
@@ -83,10 +101,28 @@ function place(match, x1, x2) {
   m.fighters[0].meter = 100
   m.step([makeInput({ super: true }), empty], DT)
   assert.equal(m.phase, 'super', 'super phase should start')
+  assert.equal(m.fighters[0].state, 'super')
+  assert.equal(m.fighters[1].state, 'frozen')
   for (let i = 0; i < Math.ceil(SUPER_DURATION / DT) + 10; i++) m.step([empty, empty], DT)
   assert.ok(m.fighters[0].meter < 100, 'meter consumed')
   assert.ok(m.fighters[1].hp <= 70, `super should take ~30%, hp=${m.fighters[1].hp}`)
   assert.equal(m.phase, 'fight')
+
+  // Regression: the caster used to stay locked in the blocked `super` state
+  // forever, so the character "stopped working" after a power move.
+  assert.notEqual(m.fighters[0].state, 'super', `caster released, got ${m.fighters[0].state}`)
+  assert.ok(m.fighters[0].actionable, 'caster must be actionable again')
+
+  // The opponent comes back standing with less energy.
+  assert.notEqual(m.fighters[1].state, 'frozen', 'target released')
+  for (let i = 0; i < 60; i++) m.step([empty, empty], DT)
+  assert.ok(['idle', 'walk', 'crouch'].includes(m.fighters[1].state), `target back on its feet, got ${m.fighters[1].state}`)
+
+  // The caster can actually move and fight again.
+  const x0 = m.fighters[0].x
+  m.step([makeInput({ moveX: 1 }), empty], DT)
+  for (let i = 0; i < 10; i++) m.step([makeInput({ moveX: 1 }), empty], DT)
+  assert.ok(m.fighters[0].x > x0, `caster walks after super (${x0} -> ${m.fighters[0].x})`)
 }
 
 // 7. KO ends the round and a second KO ends the match
