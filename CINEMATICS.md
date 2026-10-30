@@ -42,10 +42,11 @@ matching phase of `applyAttack(id, phase)`.
 | `jab` | high | chains → `cross` (P) or `kick` (K) |
 | `cross` | high | chains → `uppercut` (P) or `finisher` (K) |
 | `kick` | mid | chains → `roundhouse` (K) |
-| `uppercut` | mid, launches | **down + punch** — the SKY UPPERCUT |
+| `uppercut` | mid, launches | standing uppercut (end of the punch chain) |
 | `roundhouse` | high, knocks down | long whirling kick |
 | `finisher` | mid, knocks down | two-fisted overhead |
-| `lowJab` | low | crouching jab, chains → `uppercut` |
+| `skyUppercut` | mid, **launches** | **down + punch** — the SKY UPPERCUT |
+| `lowJab` | low | crouching jab, chains → `uppercut`/`sweep` (legacy, not routed from down+punch) |
 | `sweep` | low, knocks down | **down + kick** — leg scythe along the floor |
 | `special1` | mid, launches | **forward + punch** — character special |
 | `special2` | mid, knocks down | **forward + kick** — flying special |
@@ -56,9 +57,9 @@ matching phase of `applyAttack(id, phase)`.
 
 | Hold | Press | Result | Animation |
 | --- | --- | --- | --- |
-| S (crouch) | Punch | **SKY UPPERCUT** — launches the opponent | `uppercut`: deep crouch → explosive rise, arm rockets up, hips lift, opponent is launched |
+| S (crouch) | Punch | **SKY UPPERCUT** — launches the opponent overhead | `skyUppercut`: coiled deep crouch → explosive rise, right fist rockets to the sky, legs extend, opponent is launched |
 | S (crouch) | Kick | **SWEEP** — knocks down | `sweep`: hips sink to the floor, rear leg scythes out, torso twists |
-| S (crouch) | Punch, Punch | crouch-jab → uppercut chain | `lowJab` → `uppercut` |
+| S (crouch) | Punch, Punch | two sky uppercuts in a row | `skyUppercut` → `skyUppercut` |
 | S (crouch) | Grab | low grab attempt | `grab` |
 
 Standing scenarios: neutral Punch = jab chain, neutral Kick = kick chain,
